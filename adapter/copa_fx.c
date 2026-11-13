@@ -258,22 +258,11 @@ static int h_key(int pos, int key, int pressed)
     return 1;
 }
 
-/* The frame hook (display thread): a frame of one of this file's effects' pages, counted for the settings rows. */
-void copa_fx_frame(void)
-{
-    const int mark = page_mark();
-    for (int i = 0; mark && i < FX_MAX && recs[i].def; ++i)
-        if (recs[i].mark == mark)
-            copa_screen_called(recs[i].def, COPA_SCR_PAGE);
-}
-
 /* ---- its screen (e9): the view coop's core fills, from what the page shows ----
  * opus_called() is 0 when the core runs a hosted effect's screen_init at the start (crash record 1, 2026-11-13: Opus 2
  * build 7 dev 146), so each record gets screen entries of its own that know their record (SCREEN_ENTRIES below). */
 static void screen_init_at(int i, void *scr)
 {
-    if (recs[i].def)
-        copa_screen_called(recs[i].def, COPA_SCR_INIT);
     const coop_fx_screen_t *s = recs[i].def ? fx_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
@@ -285,7 +274,6 @@ static void screen_draw_at(int i, void *scr, int dt)
         return;
     const fx_rec *r = &recs[i];
     const coop_fx_t *f = fx_of(r);
-    copa_screen_called(r->def, page_mark() == r->mark ? COPA_SCR_OWN : COPA_SCR_OTHER);
     coop_fx_view_t v;
     volatile uint32_t *z = (volatile uint32_t *)&v;
     for (unsigned i = 0; i < sizeof v / 4; ++i)
@@ -366,7 +354,6 @@ int copa_fx_add(const copa_def *d, int index)
         return mark;
     }
     r->mark = mark;
-    copa_mark_of(d, mark);
     ++nrecs;
     return 0;
 }

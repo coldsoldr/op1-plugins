@@ -8,10 +8,10 @@ Ported from the `.coop` versions, not the kennel `.knl` ones: the coop versions 
 controls with fine steps, latches, the popup, the e9 screens). te-op1-cfw's earlier Opus files (`coldsoldr.*` 1.0.0)
 were built from the kennel versions; these use the same ids at 2.0.0, so the core loads these instead.
 
-**Status (2026-11-13): builds, the kit's file checks and the adapter's host test pass.** First device start (2.0.0,
-Opus 2 build 7 dev 146): an exception in the adapter's effect screen init at the start, because `opus_called()` is 0
-when the core runs a hosted effect's `screen_init` (crash record 1). 2.0.1 gives each effect and engine screen entries
-of its own and finds the plugin by its mark in word 4 wherever `opus_called()` is 0. Not yet run again.
+**Status (2.1.0, 2026-11-14): played on an OP-1, Opus 2 build 7 dev 146.** Saw and rings play with their FN controls,
+popups and screens; rings plays every model and polyphony, and model changes while notes ring, without a stall (the
+owner heard no clicks). The effects load with their own screens; bitcrusher was checked in full. What the runs taught
+is below ("What the OP-1 taught"). Not yet measured: the CPU figures.
 
 The build keeps `build/<name>.build/plugin_0.elf` for the crash logs:
 `python plugin-kit/tools/crashlog.py N.txt --plugin coldsoldr.NAME=build/NAME.build/plugin_0.elf`.
@@ -32,6 +32,8 @@ The build keeps `build/<name>.build/plugin_0.elf` for the crash logs:
 | the screen calls (`coop_scr_*`) | `copa_screen.c`: the R246 functions coop's core calls, at the same addresses (`fw_svg_node_find`, `fw_screen_raster` where the kit names them) |
 | `coop_l1_lease` (engines' init, 4096 bytes) | `opus_fast`, from `opl_init`, same limit, zeroed |
 | `coop_l1_scratch` (1312 bytes) | one block of `opus_fast` (else the audio pool) for the file's engines |
+| an engine's `note_on` / `note_off` in the audio thread | queued from Opus's key thread and made at the next render, one note on a block (below) |
+| the declared engine controls | `opus_on_knob` and `opus_on_key_filter` on the engine's T1 (`copa_input.c`): an engine's own `turn` and `key` never see FN's layers |
 | `coop_tempo_bpm_q16` (e10) | `opus_tempo` (core 2.21) |
 
 A click on a steps control (freq shift's mode, tape echo's heads, saw's sub) writes the OS's live words and, at the
@@ -57,8 +59,8 @@ The cost: these effects never appear in a manager's second slot.
 | `saw.opmod`, `rings.opmod` | `coldsoldr.saw`, `coldsoldr.rings` | one engine each |
 | `cs_fx.opmod` | `coldsoldr.cs_fx` | the nine effects: one row in the mods list, one set of position buffers (3 x 132 KB instead of 3 x 313 KB for the nine singles) |
 
-All need core 2.31 (`opus_page_now`). `cpu` is `unmeasured` until measured (below). Rings' state is 562 KB of zero fill,
-placed by the core.
+All need core 2.31 (`opus_page_now`). `cpu` is `unmeasured` until measured (below). Rings' voice states (556 KB) come
+from the audio pool at its init (`copa_alloc_audio`), not its zero fill.
 
 ## On the OP-1: what to try
 
@@ -79,15 +81,42 @@ placed by the core.
 5. Engines (shift + T1): saw and rings play chords; FN + blue turns saw's shape and rings' model, FN + green rings'
    polyphony, shift + FN + orange clicks saw's sub octave.
 6. Tape echo with sync on (FN + green): the time follows the tempo.
-7. CPU: the heaviest case (rings with chords; cs hall on the master), then the plugin's row details (orange push):
+7. CPU: the heaviest case (rings: sympathetic strings at polyphony 1, chords; cs hall on the master), then the
+   plugin's row details (orange push):
    "audio: worst N". Put `cycles N` in `plugins/<name>/cpu.txt` and build again.
 
 If the OP-1 crashes: the crash log is in the disk's `logs` folder; `python plugin-kit/tools/crashlog.py N.txt` reads
 it. Holding Stop while switching on starts with no plugins.
 
+## What the OP-1 taught (2026-11-13 to 14)
+
+Each found on the device, then fixed; the version that fixed it in brackets.
+
+- **`opus_called()` is 0 in a hosted effect's `screen_init`** at the start, and in other calls of a hosted effect or
+  engine: each record has screen entries of its own, and the plugin is found by its mark in word 4 (2.0.1).
+- **An engine's own `turn` and `key` never see FN's layers** (FN + turn went to the OS and moved knob 3). The engines'
+  declared controls go through `opus_on_knob` and `opus_on_key_filter` on their T1; the effects' hosted `turn` and `key`
+  do see FN and keep it (2.0.2).
+- **Opus calls an engine's `note_on` and `release` in the key thread**, which the audio interrupt cuts into; rings swaps
+  and copies voice states in its note on, and corrupted the voices it was playing. They are queued and made at the
+  next render, in order (2.0.4).
+- **A block that runs over 580,525 cycles by itself switches the plugin off at once.** One note on a block (a chord's
+  start spreads over up to 8.7 ms; not heard), and a valve: past 400,000 cycles of the file's engines in a block, the
+  block's other voices are silent (2.0.8 to 2.0.10).
+- **Opus loads a plugin's code and zero fill into whichever pool has room**; rings' landed in the far pool (Opus's
+  figures: bank 2), which costs about twice as much while the display sends a frame. Rings 0.9 takes its voice states
+  from `copa_alloc_audio` when built with `COPA_OPUS` (this build defines it for every member); this was the fix that
+  ended the stalls (2.0.14).
+- Rings itself (co-op, synced): a model or polyphony change cuts the voices struck with the old one (0.6); a chord's
+  steals go silent without a fade or a copy, one shorter fade at a time (0.7); a string's delay line is cleared as the
+  string reaches it, not 64 KB at a strike (0.8, bit-identical in the host test).
+- **Effects chosen under the single files are another mark under `cs_fx.opmod`** (and back): such a sound shows the
+  filter until the effect is chosen again.
+
 ## Open points
 
-- A plain FN + push may be Opus's own; saw's sub (shift + FN + orange click) needs the engine's `key` to see it.
+- The CPU figures: rings' heaviest case is sympathetic strings at polyphony 1 (8 strings a voice); its code still lies
+  in whichever pool the core chose.
 - Stereo at the synth and drum is mono in, mono out (Opus's instrument bus): cs hall's width and the stereo effects'
   spread are heard on the master only.
 - The OS's popups draw under the control popup (it is drawn from `opus_on_frame`).

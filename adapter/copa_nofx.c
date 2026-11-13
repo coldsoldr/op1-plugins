@@ -9,8 +9,6 @@ int copa_fx_add(const copa_def *d, int index)
     return -1;
 }
 
-void copa_fx_frame(void) {}
-
 int copa_fx_buffers(uint32_t bytes)
 {
     (void)bytes;

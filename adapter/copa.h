@@ -70,26 +70,9 @@ int copa_word(const copa_def *d, int word, int v);             /* params[5..7] a
 int copa_ctl_default(const copa_def *d, int word);
 void copa_touched(const copa_def *d, const copa_ctl *c, int pos, int value);   /* the popup: pos -1 an engine */
 void copa_shown(const copa_def *d, int pos);                   /* from a screen's draw: this page shows */
-/* copa_host.c: what each member did, for the settings page's rows (copa_status_start). */
-#define COPA_SCR_INIT  0                                        /* copa_screen_called: its screen's init ran */
-#define COPA_SCR_OWN   1                                        /* its draw ran with its own page showing */
-#define COPA_SCR_OTHER 2                                        /* its draw ran with another page showing */
-#define COPA_SCR_PAGE  3                                        /* a frame of its page (the frame hook) */
-#define COPA_E_QUEUED  4                                        /* an engine's note on queued (the key thread) */
-#define COPA_E_MADE    5                                        /* a queued note on made (the audio block) */
-#define COPA_E_INIT    6                                        /* the OS built a voice again (init) */
-#define COPA_E_FLIP    7                                        /* a render's words 5, 6 not the last render's */
-#define COPA_E_DIFF    8                                        /* a note on's words 5, 6 not the last render's */
-#define COPA_COUNTS    9
-void copa_screen_called(const copa_def *d, int what);           /* counts one of the above, for the settings rows */
-void copa_mark_of(const copa_def *d, int mark);                /* its mark, for the settings rows */
-/* An engine's render took `cycles` (its queued notes included); the host keeps the worst render, the worst block
- * (renders summed while the voice index rises) and how many renders that block had, for the settings rows. */
-void copa_render_time(int index, uint32_t cycles, int first);  /* first: the voice's first render after its note on */
-void copa_valve(void);                                         /* a render left silent by the safety valve */
-void copa_note_time(uint32_t cycles);
-void *copa_alloc_audio(uint32_t bytes);                        /* copa_host.c: for members built with COPA_OPUS */                          /* one note on's cycles: the worst is kept */
-void copa_fx_frame(void);                                      /* copa_fx.c: counts the frames of its effects' pages */
+/* copa_host.c: memory the audio reads every block (opus_alloc_audio, else opus_alloc), for members built with
+ * COPA_OPUS (rings' voice states); from their init. */
+void *copa_alloc_audio(uint32_t bytes);
 void copa_frame(unsigned short *buf);                          /* opus_on_frame: the popup over the page */
 /* The click model of coop (engine_ui.cc): a press is remembered with its layer; the release acts only when the layer
  * is the same. -> 1 taken; *action the click's action on a release that acts, else 0. */

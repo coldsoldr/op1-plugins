@@ -20,9 +20,10 @@ files from their **coop** sources.
 Each plugin's README (`plugins/<name>/README.md`) says what its encoders do. The `cs fx` pack holds all nine effects in
 one file.
 
-**Status: every file builds and reads back with the kit's checks, and the adapter's control logic passes its host test.
-None of the files has run on an OP-1 yet**; see [docs/porting.md](docs/porting.md) for how to try them and what to
-look for.
+**Status (2.1.0, 2026-11-14): played on an OP-1 with Opus 2 (build 7 dev 146).** Saw and rings play, with their FN
+controls and screens; rings plays every model and polyphony, model changes included, without a stall or a click heard.
+The effects load with their own screens and FN controls (bitcrusher checked in full). Not yet measured: the CPU
+figures (`cpu.txt`). See [docs/porting.md](docs/porting.md) for what to try and what the device runs taught.
 
 ## What is here
 
@@ -53,8 +54,9 @@ To take newer plugin sources from co-op: `python tools/sync_coop.py ../co-op`, t
 
 Opus 2 on the OP-1, then in disk mode (shift + COM, then T3) copy the `.opmod` files into the disk's `mods` folder,
 eject and restart. Use either the single effect files or `cs_fx.opmod`, not both: the second copy of an effect name is
-refused. These replace the earlier `coldsoldr.*` 1.0.0 Opus files built from the kennel versions (same ids, version
-2.0.0).
+refused. Switching between the two changes the effects' marks, so an effect chosen under one stays the plain filter
+under the other until it is chosen again (saved sounds keep the name and load right). These replace the earlier
+`coldsoldr.*` 1.0.0 Opus files built from the kennel versions (same ids, version 2.0.0 and up).
 
 ## Licence
 

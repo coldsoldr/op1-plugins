@@ -48,18 +48,6 @@ static const eng_rec *me_or(int mark)
 static inline int index_of(void *voice) { return *(volatile int32_t *)voice; }
 static inline void *state_of(const coop_engine_t *e, void *voice) { return e->voice_bytes ? (uint8_t *)voice + HEAD : 0; }
 
-static short last_words[2];        /* the last render's words 5 and 6 (the settings rows) */
-static int have_words;
-
-/* The def whose engine this is (the settings rows). */
-static const copa_def *def_of(const coop_engine_t *e)
-{
-    for (int i = 0; i < ENG_MAX && recs[i].def; ++i)
-        if (recs[i].def->desc == e)
-            return recs[i].def;
-    return 0;
-}
-
 /* ---- note on and release in the audio block, as coop's core called them ----
  * Opus calls note_on and release in the key thread (docs/api.md, Engines), which the audio interrupt can cut into; a
  * coop engine's note_on is written for the audio thread: rings' swaps and copies voice states the render is playing
@@ -81,7 +69,6 @@ static void e_init(void *voice, int index)
     const int i = index < 0 ? 0 : index % COOP_VOICES;
     *(volatile int32_t *)voice = i;
     pend[i] = 0;                   /* the voice was built again: silent, nothing owed */
-    copa_screen_called(recs[0].def, COPA_E_INIT);
 }
 
 static void queue(void *voice, const short *knobs, unsigned what)
@@ -98,8 +85,6 @@ static void queue(void *voice, const short *knobs, unsigned what)
         for (int k = 0; k < 8; ++k)
             pend_knobs[i][k] = knobs[k];
     pend_seq[i] = ++seq;
-    if (what == P_ON)
-        copa_screen_called(def_of(e), COPA_E_QUEUED);
     /* a release after a note not yet made: both, in order; a note after anything: the note alone */
     pend[i] = (uint8_t)(what == P_OFF ? (had & P_ON) | P_OFF : P_ON);
 }
@@ -115,7 +100,6 @@ static void e_release(void *voice, const short *knobs) { queue(voice, knobs, P_O
  * over six blocks, 8.7 ms. A block is told as rings tells it: a voice index no higher than the last render's. */
 #define NOTES_A_BLOCK 1
 static int notes_left;
-static uint8_t fresh[COOP_VOICES];         /* a note on made, its first render not yet (the readout) */
 
 static void flush(void)
 {
@@ -134,13 +118,7 @@ static void flush(void)
         void *voice = pend_voice[i];
         if (what & P_ON) {
             --notes_left;
-            fresh[i] = 1;
-            copa_screen_called(def_of(e), COPA_E_MADE);
-            if (have_words && (pend_knobs[i][5] != last_words[0] || pend_knobs[i][6] != last_words[1]))
-                copa_screen_called(def_of(e), COPA_E_DIFF);
-            const uint32_t t0 = copa_now();
             e->note_on(i, state_of(e, voice), 32767, pend_knobs[i]);
-            copa_note_time(copa_now() - t0);
         }
         if ((what & P_OFF) && e->note_off)
             e->note_off(i, state_of(e, voice));
@@ -155,7 +133,7 @@ static void flush(void)
 static int last_index = 99;
 static uint32_t block_used;
 
-static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch);
+static void e_render_voice(void *voice, short *out, const short *par, const unsigned *pitch);
 
 static void e_render(void *voice, short *out, const short *par, const unsigned *pitch)
 {
@@ -168,30 +146,17 @@ static void e_render(void *voice, short *out, const short *par, const unsigned *
     if (block_used > VALVE_CYCLES) {
         for (int i = 0; i < COOP_VOICE_BLOCK; ++i)
             out[i] = 0;
-        copa_valve();
         return;
     }
-    const int first = fresh[index];
     const uint32_t t0 = copa_now();
-    e_render_timed(voice, out, par, pitch);
-    const uint32_t took = copa_now() - t0;
-    block_used += took;
-    if (first)
-        fresh[index] = 0;
-    copa_render_time(index, took, first || fresh[index]);
+    e_render_voice(voice, out, par, pitch);
+    block_used += copa_now() - t0;
 }
 
-static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch)
+static void e_render_voice(void *voice, short *out, const short *par, const unsigned *pitch)
 {
     flush();
     const coop_engine_t *e = eng_of(me_or(par[4]));
-    if (e) {                       /* the settings rows: do words 5 and 6 change between renders */
-        if (have_words && (par[5] != last_words[0] || par[6] != last_words[1]))
-            copa_screen_called(def_of(e), COPA_E_FLIP);
-        last_words[0] = par[5];
-        last_words[1] = par[6];
-        have_words = 1;
-    }
     if (!e) {                      /* not ours to know: silence, never a fault */
         for (int i = 0; i < COOP_VOICE_BLOCK; ++i)
             out[i] = 0;
@@ -218,8 +183,6 @@ const copa_def *copa_engine_page(const struct opus_page *pg)
 /* Each record's own screen entries: opus_called() is 0 in a screen's init at the start (copa_fx.c). */
 static void screen_init_at(int i, void *scr)
 {
-    if (recs[i].def)
-        copa_screen_called(recs[i].def, COPA_SCR_INIT);
     const coop_screen_t *s = recs[i].def ? eng_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
@@ -230,7 +193,6 @@ static void screen_draw_at(int i, void *scr, int dt)
     if (!recs[i].def)
         return;
     const coop_screen_t *s = eng_of(&recs[i])->screen;
-    copa_screen_called(recs[i].def, COPA_SCR_OWN);
     copa_shown(recs[i].def, -1);
     if (s && s->update)
         s->update(scr, dt);
@@ -290,7 +252,6 @@ int copa_engine_add(const copa_def *d, int index)
         return mark;
     }
     r->mark = mark;
-    copa_mark_of(d, mark);
     ++nrecs;
     return 0;
 }
