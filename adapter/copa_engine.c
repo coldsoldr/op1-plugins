@@ -45,11 +45,6 @@ static const eng_rec *me_or(int mark)
     return 0;
 }
 
-static int sound_mark(void)
-{
-    short k[8];
-    return opus_engine_knobs(k) ? k[4] : 0;
-}
 static inline int index_of(void *voice) { return *(volatile int32_t *)voice; }
 static inline void *state_of(const coop_engine_t *e, void *voice) { return e->voice_bytes ? (uint8_t *)voice + HEAD : 0; }
 
@@ -83,51 +78,16 @@ static void e_render(void *voice, short *out, const short *par, const unsigned *
             out[2 * i] = out[2 * i + 1] = out[i];
 }
 
-/* fn + turn, shift + fn + turn on T1; turn and shift + turn stay the OS's. */
-static int e_turn(int encoder, int detents, int page)
+/* ---- for copa_input.c: is a page one of this file's engines' T1 ---- */
+const copa_def *copa_engine_page(const struct opus_page *pg)
 {
-    const eng_rec *r = me_or(sound_mark());
-    if (!r)
+    if (pg->kind != OPUS_PAGE_ENGINE || pg->t != 1)
         return 0;
-    const copa_def *d = r->def;
-    if (page != 0 || encoder < 0 || encoder > 3 || !d->nctl || !opus_fn_held())
-        return 0;
-    const int shift = fw_shift_held() != 0;
-    const copa_ctl *c = copa_find(d, shift ? COPA_SHIFT_FN_TURN : COPA_FN_TURN, encoder);
-    if (!c || c->kind == 'l')
-        return 1;
-    short k[8];
-    opus_engine_knobs(k);
-    const int v = copa_turn_value(c, encoder, k[c->word], detents, shift && c->action == COPA_FN_TURN);
-    if (v < 0)
-        return 1;
-    opus_engine_knob_set(c->word, v);
-    copa_touched(d, c, -1, v);
-    return 1;
-}
-
-static int e_key(int key, int pressed, int page)
-{
-    const eng_rec *r = me_or(sound_mark());
-    if (!r)
-        return 0;
-    const copa_def *d = r->def;
-    const int enc = key - 0x3B;
-    if (enc < 0 || enc > 3 || !d->nctl || (pressed && page != 0))
-        return 0;
-    int action;
-    const int taken = copa_click(enc, pressed, &action);
-    if (!action || page != 0)
-        return taken;
-    const copa_ctl *c = copa_find(d, action, enc);
-    if (!c || c->kind != 's')
-        return 1;
-    short k[8];
-    opus_engine_knobs(k);
-    const int v = copa_click_value(c, k[c->word]);
-    opus_engine_knob_set(c->word, v);
-    copa_touched(d, c, -1, v);
-    return 1;
+    const int mark = pg->par ? pg->par[4] : pg->live[4];
+    for (int i = 0; i < ENG_MAX && recs[i].def; ++i)
+        if (pg->module == &recs[i].e || (recs[i].mark && recs[i].mark == mark))
+            return recs[i].def;
+    return 0;
 }
 
 /* Each record's own screen entries: opus_called() is 0 in a screen's init at the start (copa_fx.c). */
@@ -183,8 +143,8 @@ int copa_engine_add(const copa_def *d, int index)
     e->note_on = e_note_on;
     e->release = e_release;
     e->render = e_render;
-    e->turn = e_turn;
-    e->key = e_key;
+    e->turn = 0;                   /* the controls: copa_input.c (the engine's turn never sees FN's layers) */
+    e->key = 0;
     e->type = d->name;             /* a sound made under coop names its engine so: it loads as this one */
     e->mark = 0;
     for (int k = 0; k < 4; ++k)

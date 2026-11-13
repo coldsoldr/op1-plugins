@@ -75,7 +75,12 @@ void copa_frame(unsigned short *buf);                          /* opus_on_frame:
  * is the same. -> 1 taken; *action the click's action on a release that acts, else 0. */
 int copa_click(int enc, int pressed, int *action);
 
-/* ---- copa_fx.c, copa_engine.c ---- */
+/* ---- copa_fx.c, copa_engine.c: what copa_input.c asks ---- */
+struct opus_page;
+const copa_def *copa_engine_page(const struct opus_page *pg);  /* this file's engine on the T1 shown, or 0 */
+/* ---- copa_input.c ---- */
+void copa_input_start(void);                                   /* from opl_init: the turn and key hooks */
+
 int copa_fx_add(const copa_def *d, int index);
 int copa_engine_add(const copa_def *d, int index);
 int copa_fx_buffers(uint32_t bytes);                           /* the three position buffers: 0, or -1 no room */

@@ -316,7 +316,8 @@ def build(pid, names):
         defs = Path(tmp) / 'copa_defs.c'
         defs.write_text(defs_c(members))
         kinds = {m.kind for m in members}
-        sources = [defs, ADAPTER / 'copa_host.c', ADAPTER / 'copa_ctl.c', ADAPTER / 'copa_screen.c']
+        sources = [defs, ADAPTER / 'copa_host.c', ADAPTER / 'copa_ctl.c', ADAPTER / 'copa_screen.c',
+                   ADAPTER / 'copa_input.c']
         if 'COPA_FX' in kinds:
             sources.append(ADAPTER / 'copa_fx.c')
         else:

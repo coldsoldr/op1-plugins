@@ -8,3 +8,9 @@ int copa_engine_add(const copa_def *d, int index)
     (void)index;
     return -1;
 }
+
+const copa_def *copa_engine_page(const struct opus_page *pg)
+{
+    (void)pg;
+    return 0;
+}

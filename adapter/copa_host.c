@@ -139,5 +139,6 @@ int opl_init(struct opl_self *self)
     if (!added)
         return -1;
     opus_on_frame(self, copa_frame);
+    copa_input_start();
     return 0;
 }
