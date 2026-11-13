@@ -86,25 +86,45 @@ static int same_file(const char *path, const char *data, unsigned len)
 #define ROWS 16
 static volatile int add_result[ROWS];
 static volatile signed char svg_state[ROWS];       /* 0 no screen, 1 its file is there, -1 not written */
-static volatile unsigned scr_count[ROWS][4];       /* COPA_SCR_*: init, draws on its page, on another, its frames */
+static volatile unsigned scr_count[ROWS][COPA_COUNTS];   /* COPA_SCR_*, COPA_E_* */
+static volatile int marks[ROWS];
+static volatile int seen_kind = -1, seen_t, seen_where, seen_mark;   /* the last module page shown (the frame hook) */
 
 void copa_screen_called(const copa_def *d, int what)
 {
-    const int i = (int)(d - copa_defs);
-    if (i >= 0 && i < ROWS && what >= 0 && what < 4)
+    const int i = d ? (int)(d - copa_defs) : -1;
+    if (i >= 0 && i < ROWS && what >= 0 && what < COPA_COUNTS)
         ++scr_count[i][what];
+}
+
+void copa_mark_of(const copa_def *d, int mark)
+{
+    const int i = (int)(d - copa_defs);
+    if (i >= 0 && i < ROWS)
+        marks[i] = mark;
 }
 
 static int status_row(int i, const char **label, char *value)
 {
-    if (i < 0 || i >= copa_def_count || i >= ROWS)
+    const int n = copa_def_count < ROWS ? copa_def_count : ROWS;
+    if (i == n) {                  /* the last module page shown: its kind, T key, position and word 4 */
+        *label = "page";
+        fw_snprintf(value, 40, "k%d t%d w%d m%04x", seen_kind, seen_t, seen_where, seen_mark & 0xFFFF);
+        return 1;
+    }
+    if (i < 0 || i > n)
         return 0;
     *label = copa_defs[i].name;
+    volatile unsigned *c = scr_count[i];
     if (add_result[i] < 0)
         fw_snprintf(value, 40, "not added (%d)", add_result[i]);
+    else if (copa_defs[i].kind == COPA_ENGINE)
+        fw_snprintf(value, 40, "q%u n%u i%u f%u x%u d%u m%04x", c[COPA_E_QUEUED], c[COPA_E_MADE], c[COPA_E_INIT],
+                    c[COPA_E_FLIP], c[COPA_E_DIFF], c[COPA_SCR_OWN], marks[i] & 0xFFFF);
     else
-        fw_snprintf(value, 40, "svg %s i%u d%u o%u p%u", svg_state[i] > 0 ? "ok" : svg_state[i] < 0 ? "failed" : "none",
-                    scr_count[i][0], scr_count[i][1], scr_count[i][2], scr_count[i][3]);
+        fw_snprintf(value, 40, "svg %s i%u d%u o%u p%u m%04x",
+                    svg_state[i] > 0 ? "ok" : svg_state[i] < 0 ? "failed" : "none", c[0], c[1], c[2], c[3],
+                    marks[i] & 0xFFFF);
     return 1;
 }
 
@@ -150,6 +170,13 @@ static const char *svg_path(const copa_def *d, int index)
 /* The display thread's frame: the effects' page count (the settings rows), then the controls' popup. */
 static void frame(unsigned short *buf)
 {
+    struct opus_page pg;
+    if (opus_page_now(&pg)) {
+        seen_kind = pg.kind;
+        seen_t = pg.t;
+        seen_where = pg.where;
+        seen_mark = pg.par ? pg.par[4] : pg.live[4];
+    }
     copa_fx_frame();
     copa_frame(buf);
 }

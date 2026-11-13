@@ -366,6 +366,7 @@ int copa_fx_add(const copa_def *d, int index)
         return mark;
     }
     r->mark = mark;
+    copa_mark_of(d, mark);
     ++nrecs;
     return 0;
 }

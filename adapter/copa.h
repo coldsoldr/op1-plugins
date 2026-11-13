@@ -75,7 +75,14 @@ void copa_shown(const copa_def *d, int pos);                   /* from a screen'
 #define COPA_SCR_OWN   1                                        /* its draw ran with its own page showing */
 #define COPA_SCR_OTHER 2                                        /* its draw ran with another page showing */
 #define COPA_SCR_PAGE  3                                        /* a frame of its page (the frame hook) */
-void copa_screen_called(const copa_def *d, int what);
+#define COPA_E_QUEUED  4                                        /* an engine's note on queued (the key thread) */
+#define COPA_E_MADE    5                                        /* a queued note on made (the audio block) */
+#define COPA_E_INIT    6                                        /* the OS built a voice again (init) */
+#define COPA_E_FLIP    7                                        /* a render's words 5, 6 not the last render's */
+#define COPA_E_DIFF    8                                        /* a note on's words 5, 6 not the last render's */
+#define COPA_COUNTS    9
+void copa_screen_called(const copa_def *d, int what);           /* counts one of the above, for the settings rows */
+void copa_mark_of(const copa_def *d, int mark);                /* its mark, for the settings rows */
 void copa_fx_frame(void);                                      /* copa_fx.c: counts the frames of its effects' pages */
 void copa_frame(unsigned short *buf);                          /* opus_on_frame: the popup over the page */
 /* The click model of coop (engine_ui.cc): a press is remembered with its layer; the release acts only when the layer
