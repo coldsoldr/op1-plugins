@@ -1,0 +1,28 @@
+op1-plugins - coldsoldr's OP-1 plugins (firmware R246) as Opus 2 plugins
+Copyright (C) 2026 coldsoldr and the authors named in the source files
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+General Public License as published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. It is distributed WITHOUT ANY WARRANTY; see the GNU General
+Public License (LICENSE) for details.
+
+ADDITIONAL PERMISSION (GPL-3.0 section 7)
+As an additional permission, you may combine this program, or a work based on it, with the Teenage
+Engineering OP-1 firmware (original or patched) and convey the resulting combination, provided that the
+parts of the combination that are this program or based on it are conveyed under the terms of the GPL
+with this additional permission. The OP-1 firmware itself is not covered by this license.
+
+NOT COVERED by this license
+- The Teenage Engineering OP-1 firmware and any part of it. Copyright Teenage Engineering. This
+  repository contains no firmware.
+
+THIRD-PARTY CODE (their notices are kept in their directories)
+- plugin-kit/: the Opus 2 plugin kit by LizardMan, GPL-3.0 with additional terms (GPL-3.0 section 7,
+  points c and e: a modified version is marked as different and does not use the original plugin's
+  name). Source: https://github.com/LizardMan245/opus (plugin-kit, commit 42c3692).
+- plugins/ and coop-sdk/: from coldsoldr/co-op (firmware/plugins, firmware/sdk), same author, same
+  licence and permission. Source: https://github.com/coldsoldr/co-op (plugins/COOP_SOURCE names the commit).
+- Mutable Instruments ports (Rings, Clouds' and Beads' parts in several effects): original code
+  (c) Emilie Gillet, MIT License; the LICENSE-MIT file in each plugin that uses them.
+- tools/merge.ld: from kennel's pack tools (Hundekraft, GPL-3.0-or-later with the same OP-1 firmware
+  permission), as co-op carries it.
