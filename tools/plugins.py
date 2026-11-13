@@ -8,7 +8,7 @@ A pack is one file holding several plugins: one row in the mods list, one set of
 (sized to its largest effect) instead of one set each.
 """
 AUTHOR = 'coldsoldr'
-VERSION = '2.0.11'
+VERSION = '2.0.12'
 CORE = '2.31'                      # hosted effects 2.6, opus_called 2.9, opus_tempo 2.21, opus_page_now 2.31
 
 EFFECTS = ['bitcrusher', 'drive', 'tape_drive', 'wavefolder', 'freq_shift', 'ensemble', 'tape_echo', 'cs_plate',
