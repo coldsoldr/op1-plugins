@@ -80,8 +80,49 @@ static int same_file(const char *path, const char *data, unsigned len)
     return same;
 }
 
+/* ---- what each member did, as rows on the plugin's settings page (the mods list, the blue push): whether it was
+ * added, its screen file, and how often the core ran its screen's init and draw. The screens' check on the device:
+ * a hosted effect's screen never showed on an Opus 2 OP-1 (2026-11-13), and these say which step stops. ---- */
+#define ROWS 16
+static volatile int add_result[ROWS];
+static volatile signed char svg_state[ROWS];       /* 0 no screen, 1 its file is there, -1 not written */
+static volatile unsigned scr_inits[ROWS], scr_draws[ROWS];
+
+void copa_screen_called(const copa_def *d, int draw)
+{
+    const int i = (int)(d - copa_defs);
+    if (i < 0 || i >= ROWS)
+        return;
+    if (draw)
+        ++scr_draws[i];
+    else
+        ++scr_inits[i];
+}
+
+static int status_row(int i, const char **label, char *value)
+{
+    if (i < 0 || i >= copa_def_count || i >= ROWS)
+        return 0;
+    *label = copa_defs[i].name;
+    if (add_result[i] < 0)
+        fw_snprintf(value, 40, "not added (%d)", add_result[i]);
+    else
+        fw_snprintf(value, 40, "svg %s init %u draw %u",
+                    svg_state[i] > 0 ? "ok" : svg_state[i] < 0 ? "failed" : "none", scr_inits[i], scr_draws[i]);
+    return 1;
+}
+
 #define PATHS 16
+static const char *svg_path(const copa_def *d, int index);
 const char *copa_svg_path(const copa_def *d, int index)
+{
+    const char *p = svg_path(d, index);
+    if (index >= 0 && index < ROWS)
+        svg_state[index] = p ? 1 : -1;
+    return p;
+}
+
+static const char *svg_path(const copa_def *d, int index)
 {
     static char paths[PATHS][80];
     if (!d->svg_file || index < 0 || index >= PATHS)
@@ -128,6 +169,8 @@ int opl_init(struct opl_self *self)
     for (int i = 0; i < copa_def_count; ++i) {
         const copa_def *d = &copa_defs[i];
         const int r = d->kind == COPA_FX ? copa_fx_add(d, i) : copa_engine_add(d, i);
+        if (i < ROWS)
+            add_result[i] = r;
         if (r >= 0)
             ++added;
         else {
@@ -139,6 +182,7 @@ int opl_init(struct opl_self *self)
     if (!added)
         return -1;
     opus_on_frame(self, copa_frame);
+    opus_on_settings_rows(self, status_row);
     copa_input_start();
     return 0;
 }

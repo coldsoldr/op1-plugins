@@ -70,6 +70,8 @@ int copa_word(const copa_def *d, int word, int v);             /* params[5..7] a
 int copa_ctl_default(const copa_def *d, int word);
 void copa_touched(const copa_def *d, const copa_ctl *c, int pos, int value);   /* the popup: pos -1 an engine */
 void copa_shown(const copa_def *d, int pos);                   /* from a screen's draw: this page shows */
+/* copa_host.c: what each member did, for the settings page's rows (copa_status_start). */
+void copa_screen_called(const copa_def *d, int draw);          /* a screen's init (0) or draw (1) ran */
 void copa_frame(unsigned short *buf);                          /* opus_on_frame: the popup over the page */
 /* The click model of coop (engine_ui.cc): a press is remembered with its layer; the release acts only when the layer
  * is the same. -> 1 taken; *action the click's action on a release that acts, else 0. */

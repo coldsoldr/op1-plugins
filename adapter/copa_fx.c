@@ -263,6 +263,8 @@ static int h_key(int pos, int key, int pressed)
  * build 7 dev 146), so each record gets screen entries of its own that know their record (SCREEN_ENTRIES below). */
 static void screen_init_at(int i, void *scr)
 {
+    if (recs[i].def)
+        copa_screen_called(recs[i].def, 0);
     const coop_fx_screen_t *s = recs[i].def ? fx_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
@@ -274,6 +276,7 @@ static void screen_draw_at(int i, void *scr, int dt)
         return;
     const fx_rec *r = &recs[i];
     const coop_fx_t *f = fx_of(r);
+    copa_screen_called(r->def, 1);
     coop_fx_view_t v;
     volatile uint32_t *z = (volatile uint32_t *)&v;
     for (unsigned i = 0; i < sizeof v / 4; ++i)
