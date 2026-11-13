@@ -85,7 +85,8 @@ void copa_screen_called(const copa_def *d, int what);           /* counts one of
 void copa_mark_of(const copa_def *d, int mark);                /* its mark, for the settings rows */
 /* An engine's render took `cycles` (its queued notes included); the host keeps the worst render, the worst block
  * (renders summed while the voice index rises) and how many renders that block had, for the settings rows. */
-void copa_render_time(int index, uint32_t cycles);
+void copa_render_time(int index, uint32_t cycles, int first);  /* first: the voice's first render after its note on */
+void copa_valve(void);                                         /* a render left silent by the safety valve */
 void copa_note_time(uint32_t cycles);                          /* one note on's cycles: the worst is kept */
 void copa_fx_frame(void);                                      /* copa_fx.c: counts the frames of its effects' pages */
 void copa_frame(unsigned short *buf);                          /* opus_on_frame: the popup over the page */

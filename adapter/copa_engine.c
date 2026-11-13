@@ -114,13 +114,11 @@ static void e_release(void *voice, const short *knobs) { queue(voice, knobs, P_O
  * 580,525) and rings was switched off; two a block still reached 586,000 there. One a block spreads a six-note chord
  * over six blocks, 8.7 ms. A block is told as rings tells it: a voice index no higher than the last render's. */
 #define NOTES_A_BLOCK 1
-static int last_index = 99, notes_left;
+static int notes_left;
+static uint8_t fresh[COOP_VOICES];         /* a note on made, its first render not yet (the readout) */
 
-static void flush(int index)
+static void flush(void)
 {
-    if (index <= last_index)
-        notes_left = NOTES_A_BLOCK;
-    last_index = index;
     for (;;) {
         int i = -1;
         for (int k = 0; k < COOP_VOICES; ++k)
@@ -136,6 +134,7 @@ static void flush(int index)
         void *voice = pend_voice[i];
         if (what & P_ON) {
             --notes_left;
+            fresh[i] = 1;
             copa_screen_called(def_of(e), COPA_E_MADE);
             if (have_words && (pend_knobs[i][5] != last_words[0] || pend_knobs[i][6] != last_words[1]))
                 copa_screen_called(def_of(e), COPA_E_DIFF);
@@ -148,18 +147,43 @@ static void flush(int index)
     }
 }
 
+/* The safety valve: once this file's engines have taken VALVE_CYCLES of a block, its other voices are silent for that
+ * block (a short gap) instead of the block running late: the block is 580,525 cycles, and the OS, the effects and the
+ * other plugins need theirs. On an Opus 2 OP-1 (2026-11-13) rings alone reached 573,000 after a model change and was
+ * switched off. A block is told as rings tells it: a voice index no higher than the last render's. */
+#define VALVE_CYCLES 400000u
+static int last_index = 99;
+static uint32_t block_used;
+
 static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch);
 
 static void e_render(void *voice, short *out, const short *par, const unsigned *pitch)
 {
+    const int index = index_of(voice);
+    if (index <= last_index) {
+        block_used = 0;
+        notes_left = NOTES_A_BLOCK;
+    }
+    last_index = index;
+    if (block_used > VALVE_CYCLES) {
+        for (int i = 0; i < COOP_VOICE_BLOCK; ++i)
+            out[i] = 0;
+        copa_valve();
+        return;
+    }
+    const int first = fresh[index];
     const uint32_t t0 = copa_now();
     e_render_timed(voice, out, par, pitch);
-    copa_render_time(index_of(voice), copa_now() - t0);
+    const uint32_t took = copa_now() - t0;
+    block_used += took;
+    if (first)
+        fresh[index] = 0;
+    copa_render_time(index, took, first || fresh[index]);
 }
 
 static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch)
 {
-    flush(index_of(voice));
+    flush();
     const coop_engine_t *e = eng_of(me_or(par[4]));
     if (e) {                       /* the settings rows: do words 5 and 6 change between renders */
         if (have_words && (par[5] != last_words[0] || par[6] != last_words[1]))

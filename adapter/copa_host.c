@@ -98,10 +98,17 @@ void copa_screen_called(const copa_def *d, int what)
 }
 
 static uint32_t worst_render, worst_block, block_sum, worst_renders, block_renders, slow_renders;
+static uint32_t worst_first, worst_later, valves;
 static int last_index = 99;
 
-void copa_render_time(int index, uint32_t cycles)
+void copa_valve(void) { ++valves; }
+
+void copa_render_time(int index, uint32_t cycles, int first)
 {
+    if (first && cycles > worst_first)
+        worst_first = cycles;
+    if (!first && cycles > worst_later)
+        worst_later = cycles;
     if (index <= last_index) {     /* a voice again, or a lower one: a new block */
         block_sum = 0;
         block_renders = 0;
@@ -144,8 +151,8 @@ static int status_row(int i, const char **label, char *value)
     }
     if (i == n + 1) {              /* the engines' worst render and block, in thousands of cycles (a block: 580) */
         *label = "time";
-        fw_snprintf(value, 40, "r%u b%u n%u s%u o%u", worst_render / 1000, worst_block / 1000, worst_renders,
-                    slow_renders, worst_note / 1000);
+        fw_snprintf(value, 40, "b%u n%u s%u o%u f%u l%u v%u", worst_block / 1000, worst_renders, slow_renders,
+                    worst_note / 1000, worst_first / 1000, worst_later / 1000, valves);
         return 1;
     }
     if (i < 0 || i > n + 1)
