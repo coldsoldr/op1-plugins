@@ -97,6 +97,28 @@ void copa_screen_called(const copa_def *d, int what)
         ++scr_count[i][what];
 }
 
+static uint32_t worst_render, worst_block, block_sum, worst_renders, block_renders, slow_renders;
+static int last_index = 99;
+
+void copa_render_time(int index, uint32_t cycles)
+{
+    if (index <= last_index) {     /* a voice again, or a lower one: a new block */
+        block_sum = 0;
+        block_renders = 0;
+    }
+    last_index = index;
+    block_sum += cycles;
+    ++block_renders;
+    if (cycles > worst_render)
+        worst_render = cycles;
+    if (cycles > 100000)
+        ++slow_renders;
+    if (block_sum > worst_block) {
+        worst_block = block_sum;
+        worst_renders = block_renders;
+    }
+}
+
 void copa_mark_of(const copa_def *d, int mark)
 {
     const int i = (int)(d - copa_defs);
@@ -112,7 +134,13 @@ static int status_row(int i, const char **label, char *value)
         fw_snprintf(value, 40, "k%d t%d w%d m%04x", seen_kind, seen_t, seen_where, seen_mark & 0xFFFF);
         return 1;
     }
-    if (i < 0 || i > n)
+    if (i == n + 1) {              /* the engines' worst render and block, in thousands of cycles (a block: 580) */
+        *label = "time";
+        fw_snprintf(value, 40, "r%u b%u n%u s%u", worst_render / 1000, worst_block / 1000, worst_renders,
+                    slow_renders);
+        return 1;
+    }
+    if (i < 0 || i > n + 1)
         return 0;
     *label = copa_defs[i].name;
     volatile unsigned *c = scr_count[i];

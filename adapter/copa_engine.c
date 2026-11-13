@@ -133,7 +133,16 @@ static void flush(void)
     }
 }
 
+static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch);
+
 static void e_render(void *voice, short *out, const short *par, const unsigned *pitch)
+{
+    const uint32_t t0 = copa_now();
+    e_render_timed(voice, out, par, pitch);
+    copa_render_time(index_of(voice), copa_now() - t0);
+}
+
+static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch)
 {
     flush();
     const coop_engine_t *e = eng_of(me_or(par[4]));
