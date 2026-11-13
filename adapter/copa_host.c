@@ -119,6 +119,14 @@ void copa_render_time(int index, uint32_t cycles)
     }
 }
 
+static uint32_t worst_note;
+
+void copa_note_time(uint32_t cycles)
+{
+    if (cycles > worst_note)
+        worst_note = cycles;
+}
+
 void copa_mark_of(const copa_def *d, int mark)
 {
     const int i = (int)(d - copa_defs);
@@ -136,8 +144,8 @@ static int status_row(int i, const char **label, char *value)
     }
     if (i == n + 1) {              /* the engines' worst render and block, in thousands of cycles (a block: 580) */
         *label = "time";
-        fw_snprintf(value, 40, "r%u b%u n%u s%u", worst_render / 1000, worst_block / 1000, worst_renders,
-                    slow_renders);
+        fw_snprintf(value, 40, "r%u b%u n%u s%u o%u", worst_render / 1000, worst_block / 1000, worst_renders,
+                    slow_renders, worst_note / 1000);
         return 1;
     }
     if (i < 0 || i > n + 1)

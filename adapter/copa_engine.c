@@ -111,9 +111,9 @@ static void e_release(void *voice, const short *knobs) { queue(voice, knobs, P_O
 /* The audio block: the queued calls, oldest first, at most NOTES_A_BLOCK note ons a block (the rest wait for the next
  * block, in order). A note on can be dear: on an Opus 2 OP-1 (2026-11-13) rings' six note ons of a chord, each
  * rebuilding a voice cut by a model change, and the strikes after them took 630,000 cycles in one block (the block is
- * 580,525) and rings was switched off. Two a block spread a six-note chord over three blocks, 4.4 ms. A block is told
- * as rings tells it: a voice index no higher than the last render's. */
-#define NOTES_A_BLOCK 2
+ * 580,525) and rings was switched off; two a block still reached 586,000 there. One a block spreads a six-note chord
+ * over six blocks, 8.7 ms. A block is told as rings tells it: a voice index no higher than the last render's. */
+#define NOTES_A_BLOCK 1
 static int last_index = 99, notes_left;
 
 static void flush(int index)
@@ -139,7 +139,9 @@ static void flush(int index)
             copa_screen_called(def_of(e), COPA_E_MADE);
             if (have_words && (pend_knobs[i][5] != last_words[0] || pend_knobs[i][6] != last_words[1]))
                 copa_screen_called(def_of(e), COPA_E_DIFF);
+            const uint32_t t0 = copa_now();
             e->note_on(i, state_of(e, voice), 32767, pend_knobs[i]);
+            copa_note_time(copa_now() - t0);
         }
         if ((what & P_OFF) && e->note_off)
             e->note_off(i, state_of(e, voice));

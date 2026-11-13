@@ -86,6 +86,7 @@ void copa_mark_of(const copa_def *d, int mark);                /* its mark, for 
 /* An engine's render took `cycles` (its queued notes included); the host keeps the worst render, the worst block
  * (renders summed while the voice index rises) and how many renders that block had, for the settings rows. */
 void copa_render_time(int index, uint32_t cycles);
+void copa_note_time(uint32_t cycles);                          /* one note on's cycles: the worst is kept */
 void copa_fx_frame(void);                                      /* copa_fx.c: counts the frames of its effects' pages */
 void copa_frame(unsigned short *buf);                          /* opus_on_frame: the popup over the page */
 /* The click model of coop (engine_ui.cc): a press is remembered with its layer; the release acts only when the layer
