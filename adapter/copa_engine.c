@@ -145,7 +145,7 @@ const copa_def *copa_engine_page(const struct opus_page *pg)
 static void screen_init_at(int i, void *scr)
 {
     if (recs[i].def)
-        copa_screen_called(recs[i].def, 0);
+        copa_screen_called(recs[i].def, COPA_SCR_INIT);
     const coop_screen_t *s = recs[i].def ? eng_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
@@ -156,7 +156,7 @@ static void screen_draw_at(int i, void *scr, int dt)
     if (!recs[i].def)
         return;
     const coop_screen_t *s = eng_of(&recs[i])->screen;
-    copa_screen_called(recs[i].def, 1);
+    copa_screen_called(recs[i].def, COPA_SCR_OWN);
     copa_shown(recs[i].def, -1);
     if (s && s->update)
         s->update(scr, dt);

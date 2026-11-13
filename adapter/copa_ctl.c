@@ -155,6 +155,7 @@ static int put(char *s, int o, int max, const char *t)
 void copa_frame(unsigned short *buf)
 {
     (void)buf;
+    copa_fx_frame();
     const uint32_t at = s_pop_at, now = copa_now();
     if (!at)
         return;

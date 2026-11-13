@@ -86,17 +86,13 @@ static int same_file(const char *path, const char *data, unsigned len)
 #define ROWS 16
 static volatile int add_result[ROWS];
 static volatile signed char svg_state[ROWS];       /* 0 no screen, 1 its file is there, -1 not written */
-static volatile unsigned scr_inits[ROWS], scr_draws[ROWS];
+static volatile unsigned scr_count[ROWS][4];       /* COPA_SCR_*: init, draws on its page, on another, its frames */
 
-void copa_screen_called(const copa_def *d, int draw)
+void copa_screen_called(const copa_def *d, int what)
 {
     const int i = (int)(d - copa_defs);
-    if (i < 0 || i >= ROWS)
-        return;
-    if (draw)
-        ++scr_draws[i];
-    else
-        ++scr_inits[i];
+    if (i >= 0 && i < ROWS && what >= 0 && what < 4)
+        ++scr_count[i][what];
 }
 
 static int status_row(int i, const char **label, char *value)
@@ -107,8 +103,8 @@ static int status_row(int i, const char **label, char *value)
     if (add_result[i] < 0)
         fw_snprintf(value, 40, "not added (%d)", add_result[i]);
     else
-        fw_snprintf(value, 40, "svg %s init %u draw %u",
-                    svg_state[i] > 0 ? "ok" : svg_state[i] < 0 ? "failed" : "none", scr_inits[i], scr_draws[i]);
+        fw_snprintf(value, 40, "svg %s i%u d%u o%u p%u", svg_state[i] > 0 ? "ok" : svg_state[i] < 0 ? "failed" : "none",
+                    scr_count[i][0], scr_count[i][1], scr_count[i][2], scr_count[i][3]);
     return 1;
 }
 
