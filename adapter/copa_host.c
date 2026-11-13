@@ -147,6 +147,13 @@ static const char *svg_path(const copa_def *d, int index)
     return opus_rename(tmp, path) == OPUS_RENAME_OK ? path : 0;
 }
 
+/* The display thread's frame: the effects' page count (the settings rows), then the controls' popup. */
+static void frame(unsigned short *buf)
+{
+    copa_fx_frame();
+    copa_frame(buf);
+}
+
 int opl_init(struct opl_self *self)
 {
     copa_self = self;
@@ -177,7 +184,7 @@ int opl_init(struct opl_self *self)
     }
     if (!added)
         return -1;
-    opus_on_frame(self, copa_frame);
+    opus_on_frame(self, frame);
     opus_on_settings_rows(self, status_row);
     copa_input_start();
     return 0;
