@@ -52,6 +52,25 @@ void *coop_l1_scratch(uint32_t *bytes)
     return l1_scratch;
 }
 
+/* ---- memory the audio reads every block, for a member built with COPA_OPUS (rings' voice states): the audio pool,
+ * which the display does not share, else the plain pool; zeroed, 32-byte aligned. From its init (opl_init). ---- */
+static unsigned alloc_audio_k, alloc_plain_k, alloc_none;   /* KB from each pool, refusals (the settings rows) */
+
+void *copa_alloc_audio(uint32_t bytes)
+{
+    void *p = opus_alloc_audio(copa_self, bytes);
+    if (p) {
+        alloc_audio_k += bytes / 1024;
+        return p;
+    }
+    p = opus_alloc(copa_self, bytes);
+    if (p)
+        alloc_plain_k += bytes / 1024;
+    else
+        ++alloc_none;
+    return p;
+}
+
 /* ---- the tempo (e10): BPM as Q16, 120 << 16 outside 20..400 BPM or unknown. Any thread, the audio included. ---- */
 uint32_t coop_tempo_bpm_q16(void)
 {
@@ -168,7 +187,8 @@ static int status_row(int i, const char **label, char *value)
     }
     if (i == n + 3) {              /* this plugin's memory bank (1 near, 2 far: the display's), its RAM, late blocks */
         *label = "mem";
-        fw_snprintf(value, 40, "bank %d ram %uk late %u", my_bank, my_ram / 1024, audio_late);
+        fw_snprintf(value, 40, "bank %d ram %uk late %u a%u p%u x%u", my_bank, my_ram / 1024, audio_late,
+                    alloc_audio_k, alloc_plain_k, alloc_none);
         return 1;
     }
     if (i < 0 || i > n + 3)

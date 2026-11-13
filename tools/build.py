@@ -124,6 +124,7 @@ class Member:
         includes = ['-I' + str(self.dir)] + ['-I' + str((self.dir / d).resolve()) for d in m.get('include_dirs', [])]
         includes.append('-I' + str(COOP_SDK))
         defs = [f'-DCOOP_FX_SCRATCH_BYTES={self.scratch}'] if self.scratch else []
+        defs.append('-DCOPA_OPUS')   # built for this adapter: a member may use its services (copa_alloc_audio)
         objs = []
         for i, src in enumerate(m['sources']):
             path = (self.dir / src).resolve()
