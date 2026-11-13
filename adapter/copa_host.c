@@ -88,6 +88,8 @@ static int same_file(const char *path, const char *data, unsigned len)
 #define ROWS 16
 static volatile int add_result[ROWS];
 static volatile signed char svg_state[ROWS];       /* 0 no screen, 1 its file is there, -1 not written */
+static volatile int my_bank = -1;            /* the core's figures (read_stats, below) */
+static volatile unsigned my_ram, audio_late, stats_frames;
 static volatile unsigned scr_count[ROWS][COPA_COUNTS];   /* COPA_SCR_*, COPA_E_* */
 static volatile int marks[ROWS];
 static volatile int seen_kind = -1, seen_t, seen_where, seen_mark;   /* the last module page shown (the frame hook) */
@@ -164,7 +166,12 @@ static int status_row(int i, const char **label, char *value)
                     where[scratch_where]);
         return 1;
     }
-    if (i < 0 || i > n + 2)
+    if (i == n + 3) {              /* this plugin's memory bank (1 near, 2 far: the display's), its RAM, late blocks */
+        *label = "mem";
+        fw_snprintf(value, 40, "bank %d ram %uk late %u", my_bank, my_ram / 1024, audio_late);
+        return 1;
+    }
+    if (i < 0 || i > n + 3)
         return 0;
     *label = copa_defs[i].name;
     volatile unsigned *c = scr_count[i];
@@ -219,9 +226,60 @@ static const char *svg_path(const copa_def *d, int index)
     return opus_rename(tmp, path) == OPUS_RENAME_OK ? path : 0;
 }
 
+/* ---- the core's figures for this plugin (opus_stats, core 2.28; the layout is api.md's, not in opus_plugin.h): its
+ * memory's bank (1 the near pool, 2 the far pool the display shares) and the audio's late blocks, for the settings
+ * rows. Asked every 128 frames from the display thread; the record is about 7 KB. ---- */
+#define STATS_MAGIC 0x5453504Fu
+#define STATS_PLUGINS 4
+#define STATS_AUDIO 1
+struct stats_head {
+    unsigned magic;
+    unsigned short version, head_size;
+    unsigned size, seq, cycles_lo, cycles_hi, uptime_ms, block_cycles;
+};
+struct stats_section { unsigned short tag, entry_size, count, pad; };
+struct stats_plugin { unsigned ram, base, image; short part; unsigned char state, bank; };
+struct stats_audio { unsigned block_lo, block_hi, blocks, late; };
+static unsigned stats_buf[4096];           /* 16 KB */
+
+static void read_stats(void)
+{
+    if ((stats_frames++ & 127) != 0)
+        return;
+    const int n = opus_stats(stats_buf, sizeof stats_buf);
+    if (n <= 0)
+        return;
+    const unsigned char *rec = (const unsigned char *)stats_buf;
+    const struct stats_head *h = (const struct stats_head *)rec;
+    if (h->magic != STATS_MAGIC)
+        return;
+    const unsigned me = (unsigned)(unsigned long)&opl_init;
+    unsigned at = (h->head_size + 7u) & ~7u;
+    while (at + sizeof(struct stats_section) <= (unsigned)n) {
+        const struct stats_section *sec = (const struct stats_section *)(rec + at);
+        const unsigned body = at + sizeof *sec;
+        for (unsigned i = 0; i < sec->count; ++i) {
+            const unsigned char *e = rec + body + i * sec->entry_size;
+            if (body + (i + 1) * sec->entry_size > (unsigned)n)
+                break;
+            if (sec->tag == STATS_PLUGINS && sec->entry_size >= sizeof(struct stats_plugin)) {
+                const struct stats_plugin *pl = (const struct stats_plugin *)e;
+                if (me >= pl->base && me < pl->base + pl->image) {
+                    my_bank = pl->bank;
+                    my_ram = pl->ram;
+                }
+            } else if (sec->tag == STATS_AUDIO && sec->entry_size >= sizeof(struct stats_audio)) {
+                audio_late = ((const struct stats_audio *)e)->late;
+            }
+        }
+        at = (body + sec->count * sec->entry_size + 7u) & ~7u;
+    }
+}
+
 /* The display thread's frame: the effects' page count (the settings rows), then the controls' popup. */
 static void frame(unsigned short *buf)
 {
+    read_stats();
     struct opus_page pg;
     if (opus_page_now(&pg)) {
         seen_kind = pg.kind;
