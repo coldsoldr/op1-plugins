@@ -108,9 +108,19 @@ static void e_note_on(void *voice, const short *knobs) { queue(voice, knobs, P_O
 
 static void e_release(void *voice, const short *knobs) { queue(voice, knobs, P_OFF); }
 
-/* The audio block: the queued calls, oldest first. */
-static void flush(void)
+/* The audio block: the queued calls, oldest first, at most NOTES_A_BLOCK note ons a block (the rest wait for the next
+ * block, in order). A note on can be dear: on an Opus 2 OP-1 (2026-11-13) rings' six note ons of a chord, each
+ * rebuilding a voice cut by a model change, and the strikes after them took 630,000 cycles in one block (the block is
+ * 580,525) and rings was switched off. Two a block spread a six-note chord over three blocks, 4.4 ms. A block is told
+ * as rings tells it: a voice index no higher than the last render's. */
+#define NOTES_A_BLOCK 2
+static int last_index = 99, notes_left;
+
+static void flush(int index)
 {
+    if (index <= last_index)
+        notes_left = NOTES_A_BLOCK;
+    last_index = index;
     for (;;) {
         int i = -1;
         for (int k = 0; k < COOP_VOICES; ++k)
@@ -118,11 +128,14 @@ static void flush(void)
                 i = k;
         if (i < 0)
             return;
+        if ((pend[i] & P_ON) && notes_left <= 0)
+            return;                /* the next block's: the older first, so nothing passes it */
         const unsigned what = pend[i];
         pend[i] = 0;
         const coop_engine_t *e = pend_eng[i];
         void *voice = pend_voice[i];
         if (what & P_ON) {
+            --notes_left;
             copa_screen_called(def_of(e), COPA_E_MADE);
             if (have_words && (pend_knobs[i][5] != last_words[0] || pend_knobs[i][6] != last_words[1]))
                 copa_screen_called(def_of(e), COPA_E_DIFF);
@@ -144,7 +157,7 @@ static void e_render(void *voice, short *out, const short *par, const unsigned *
 
 static void e_render_timed(void *voice, short *out, const short *par, const unsigned *pitch)
 {
-    flush();
+    flush(index_of(voice));
     const coop_engine_t *e = eng_of(me_or(par[4]));
     if (e) {                       /* the settings rows: do words 5 and 6 change between renders */
         if (have_words && (par[5] != last_words[0] || par[6] != last_words[1]))
