@@ -22,9 +22,9 @@ fw_*), a name in TAKEN_NAMES, a file over the kit's limits.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -302,7 +302,12 @@ def build(pid, names):
     if not re.fullmatch(r'[a-z0-9_]+', pid):
         raise Error('bad name ' + pid)
     OUT.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
+    work = OUT / f'{pid}.build'                # kept, as the kit's build keeps it: crashlog.py reads plugin_0.elf
+    if work.exists():
+        shutil.rmtree(work)
+    work.mkdir()
+    if True:
+        tmp = str(work)
         members = [Member(n, i, tmp) for i, n in enumerate(names)]
         names_seen = [display(m.name) for m in members]
         if len(set(names_seen)) != len(names_seen):

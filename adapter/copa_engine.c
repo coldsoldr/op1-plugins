@@ -23,6 +23,7 @@
 typedef struct {
     struct opus_engine e;          /* first: opus_called() is this */
     const copa_def *def;
+    int mark;
 } eng_rec;
 
 #define ENG_MAX 8
@@ -30,7 +31,25 @@ static eng_rec recs[ENG_MAX];
 static int nrecs;
 
 static inline const eng_rec *me(void) { return (const eng_rec *)opus_called(); }
-static inline const coop_engine_t *eng_of(const eng_rec *r) { return (const coop_engine_t *)r->def->desc; }
+static inline const coop_engine_t *eng_of(const eng_rec *r) { return r ? (const coop_engine_t *)r->def->desc : 0; }
+
+/* The record the core is calling: opus_called(), else the one whose mark is in knob 4, else 0. */
+static const eng_rec *me_or(int mark)
+{
+    const eng_rec *r = me();
+    if (r)
+        return r;
+    for (int i = 0; i < ENG_MAX && recs[i].def; ++i)
+        if (recs[i].mark && recs[i].mark == mark)
+            return &recs[i];
+    return 0;
+}
+
+static int sound_mark(void)
+{
+    short k[8];
+    return opus_engine_knobs(k) ? k[4] : 0;
+}
 static inline int index_of(void *voice) { return *(volatile int32_t *)voice; }
 static inline void *state_of(const coop_engine_t *e, void *voice) { return e->voice_bytes ? (uint8_t *)voice + HEAD : 0; }
 
@@ -38,21 +57,26 @@ static void e_init(void *voice, int index) { *(volatile int32_t *)voice = index 
 
 static void e_note_on(void *voice, const short *knobs)
 {
-    const coop_engine_t *e = eng_of(me());
-    e->note_on(index_of(voice), state_of(e, voice), 32767, knobs);
+    const coop_engine_t *e = eng_of(me_or(knobs[4]));
+    if (e)
+        e->note_on(index_of(voice), state_of(e, voice), 32767, knobs);
 }
 
 static void e_release(void *voice, const short *knobs)
 {
-    (void)knobs;
-    const coop_engine_t *e = eng_of(me());
-    if (e->note_off)
+    const coop_engine_t *e = eng_of(me_or(knobs[4]));
+    if (e && e->note_off)
         e->note_off(index_of(voice), state_of(e, voice));
 }
 
 static void e_render(void *voice, short *out, const short *par, const unsigned *pitch)
 {
-    const coop_engine_t *e = eng_of(me());
+    const coop_engine_t *e = eng_of(me_or(par[4]));
+    if (!e) {                      /* not ours to know: silence, never a fault */
+        for (int i = 0; i < COOP_VOICE_BLOCK; ++i)
+            out[i] = 0;
+        return;
+    }
     e->render(index_of(voice), state_of(e, voice), out, (const int32_t *)pitch, par);
     if (e->flags & COOP_ENGINE_F_44K)
         for (int i = COOP_VOICE_BLOCK_44K - 1; i >= 0; --i)
@@ -62,7 +86,10 @@ static void e_render(void *voice, short *out, const short *par, const unsigned *
 /* fn + turn, shift + fn + turn on T1; turn and shift + turn stay the OS's. */
 static int e_turn(int encoder, int detents, int page)
 {
-    const copa_def *d = me()->def;
+    const eng_rec *r = me_or(sound_mark());
+    if (!r)
+        return 0;
+    const copa_def *d = r->def;
     if (page != 0 || encoder < 0 || encoder > 3 || !d->nctl || !opus_fn_held())
         return 0;
     const int shift = fw_shift_held() != 0;
@@ -81,7 +108,10 @@ static int e_turn(int encoder, int detents, int page)
 
 static int e_key(int key, int pressed, int page)
 {
-    const copa_def *d = me()->def;
+    const eng_rec *r = me_or(sound_mark());
+    if (!r)
+        return 0;
+    const copa_def *d = r->def;
     const int enc = key - 0x3B;
     if (enc < 0 || enc > 3 || !d->nctl || (pressed && page != 0))
         return 0;
@@ -100,21 +130,29 @@ static int e_key(int key, int pressed, int page)
     return 1;
 }
 
-static void e_screen_init(void *scr)
+/* Each record's own screen entries: opus_called() is 0 in a screen's init at the start (copa_fx.c). */
+static void screen_init_at(int i, void *scr)
 {
-    const coop_screen_t *s = eng_of(me())->screen;
+    const coop_screen_t *s = recs[i].def ? eng_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
 }
 
-static void e_screen_draw(void *scr, int dt)
+static void screen_draw_at(int i, void *scr, int dt)
 {
-    const eng_rec *r = me();
-    const coop_screen_t *s = eng_of(r)->screen;
-    copa_shown(r->def, -1);
+    if (!recs[i].def)
+        return;
+    const coop_screen_t *s = eng_of(&recs[i])->screen;
+    copa_shown(recs[i].def, -1);
     if (s && s->update)
         s->update(scr, dt);
 }
+
+#define E(i) static void si##i(void *scr) { screen_init_at(i, scr); }              static void sd##i(void *scr, int dt) { screen_draw_at(i, scr, dt); }
+E(0) E(1) E(2) E(3) E(4) E(5) E(6) E(7)
+#undef E
+static void (*const screen_inits[ENG_MAX])(void *) = { si0, si1, si2, si3, si4, si5, si6, si7 };
+static void (*const screen_draws[ENG_MAX])(void *, int) = { sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7 };
 
 int copa_engine_add(const copa_def *d, int index)
 {
@@ -154,13 +192,16 @@ int copa_engine_add(const copa_def *d, int index)
     if (ce->screen) {
         e->svg = copa_svg_path(d, index);
         if (e->svg) {
-            e->screen_init = e_screen_init;
-            e->screen_draw = e_screen_draw;
+            e->screen_init = screen_inits[nrecs];
+            e->screen_draw = screen_draws[nrecs];
         }
     }
     const int mark = opus_engine_add(copa_self, e);
-    if (mark < 0)
+    if (mark < 0) {
+        r->def = 0;
         return mark;
+    }
+    r->mark = mark;
     ++nrecs;
     return 0;
 }

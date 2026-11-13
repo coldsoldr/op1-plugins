@@ -8,7 +8,13 @@ Ported from the `.coop` versions, not the kennel `.knl` ones: the coop versions 
 controls with fine steps, latches, the popup, the e9 screens). te-op1-cfw's earlier Opus files (`coldsoldr.*` 1.0.0)
 were built from the kennel versions; these use the same ids at 2.0.0, so the core loads these instead.
 
-**Status (2026-11-13): builds, the kit's file checks and the adapter's host test pass. Not yet run on an OP-1.**
+**Status (2026-11-13): builds, the kit's file checks and the adapter's host test pass.** First device start (2.0.0,
+Opus 2 build 7 dev 146): an exception in the adapter's effect screen init at the start, because `opus_called()` is 0
+when the core runs a hosted effect's `screen_init` (crash record 1). 2.0.1 gives each effect and engine screen entries
+of its own and finds the plugin by its mark in word 4 wherever `opus_called()` is 0. Not yet run again.
+
+The build keeps `build/<name>.build/plugin_0.elf` for the crash logs:
+`python plugin-kit/tools/crashlog.py N.txt --plugin coldsoldr.NAME=build/NAME.build/plugin_0.elf`.
 
 ## How the coop interface maps
 

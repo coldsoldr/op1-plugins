@@ -41,7 +41,7 @@ typedef struct {
     volatile int failed;           /* its init refused: it passes the sound through */
 } fx_rec;
 
-#define FX_MAX 32
+#define FX_MAX 16                  /* a file's effects: the screen entries below are one per record */
 static fx_rec recs[FX_MAX];
 static int nrecs;
 
@@ -52,6 +52,25 @@ static uint32_t buf_bytes;
 static int32_t L[BLOCK], R[BLOCK];
 
 static inline const fx_rec *me(void) { return (const fx_rec *)opus_called(); }
+
+/* The record the core is calling: opus_called(), else the one whose mark is in word 4 (the OS carries every hosted
+ * effect as the filter with its mark there), else 0. */
+static const fx_rec *me_or(int mark)
+{
+    const fx_rec *r = me();
+    if (r)
+        return r;
+    for (int i = 0; i < FX_MAX && recs[i].def; ++i)
+        if (recs[i].mark && recs[i].mark == mark)
+            return &recs[i];
+    return 0;
+}
+
+static int page_mark(void)
+{
+    struct opus_page pg;
+    return opus_page_now(&pg) && pg.kind == OPUS_PAGE_EFFECT ? pg.live[4] : 0;
+}
 static inline const coop_fx_t *fx_of(const fx_rec *r) { return (const coop_fx_t *)r->def->desc; }
 static inline int16_t sat16(int32_t x) { return x > 32767 ? 32767 : x < -32768 ? -32768 : (int16_t)x; }
 
@@ -132,8 +151,8 @@ static void h_init(int pos)
 
 static void h_render(int pos, short *buf, const short *par)
 {
-    const fx_rec *r = me();
-    if (pos < 0 || pos > 1 || !started(r, pos))
+    const fx_rec *r = me_or(par[4]);
+    if (!r || pos < 0 || pos > 1 || !started(r, pos))
         return;
     int16_t p[COOP_FX_PARAMS_MIN];
     params(r, pos, par, p);
@@ -146,8 +165,8 @@ static void h_render(int pos, short *buf, const short *par)
 
 static void h_render_stereo(int pos, short *l, short *rr, const short *par)
 {
-    const fx_rec *r = me();
-    if (pos != 2 || !started(r, pos))
+    const fx_rec *r = me_or(par[4]);
+    if (!r || pos != 2 || !started(r, pos))
         return;
     int16_t p[COOP_FX_PARAMS_MIN];
     params(r, pos, par, p);
@@ -165,7 +184,9 @@ static void h_render_stereo(int pos, short *l, short *rr, const short *par)
 /* fn + turn, shift + fn + turn on its page. Plain turns and shift + turns are the OS's (the four knobs). */
 static int h_turn(int pos, short *par, int encoder, int detents)
 {
-    const fx_rec *r = me();
+    const fx_rec *r = me_or(par[4]);
+    if (!r)
+        return 0;
     const copa_def *d = r->def;
     if (encoder < 0 || encoder > 3 || !d->nctl || !opus_fn_held())
         return 0;
@@ -207,7 +228,9 @@ static void set_word(int pos, int word, int value)
 
 static int h_key(int pos, int key, int pressed)
 {
-    const fx_rec *r = me();
+    const fx_rec *r = me_or(page_mark());
+    if (!r)
+        return 0;
     const copa_def *d = r->def;
     const int enc = key - 0x3B;
     if (enc < 0 || enc > 3 || !d->nctl || pos < 0 || pos > 2)
@@ -235,17 +258,21 @@ static int h_key(int pos, int key, int pressed)
     return 1;
 }
 
-/* ---- its screen (e9): the view coop's core fills, from what the page shows ---- */
-static void h_screen_init(void *scr)
+/* ---- its screen (e9): the view coop's core fills, from what the page shows ----
+ * opus_called() is 0 when the core runs a hosted effect's screen_init at the start (crash record 1, 2026-11-13: Opus 2
+ * build 7 dev 146), so each record gets screen entries of its own that know their record (SCREEN_ENTRIES below). */
+static void screen_init_at(int i, void *scr)
 {
-    const coop_fx_screen_t *s = fx_of(me())->screen;
+    const coop_fx_screen_t *s = recs[i].def ? fx_of(&recs[i])->screen : 0;
     if (s && s->init)
         s->init(scr);
 }
 
-static void h_screen_draw(void *scr, int dt)
+static void screen_draw_at(int i, void *scr, int dt)
 {
-    const fx_rec *r = me();
+    if (!recs[i].def)
+        return;
+    const fx_rec *r = &recs[i];
     const coop_fx_t *f = fx_of(r);
     coop_fx_view_t v;
     volatile uint32_t *z = (volatile uint32_t *)&v;
@@ -280,6 +307,14 @@ static void h_screen_draw(void *scr, int dt)
         f->screen->update(scr, dt, &v);
 }
 
+#define E(i) static void si##i(void *scr) { screen_init_at(i, scr); }              static void sd##i(void *scr, int dt) { screen_draw_at(i, scr, dt); }
+E(0) E(1) E(2) E(3) E(4) E(5) E(6) E(7) E(8) E(9) E(10) E(11) E(12) E(13) E(14) E(15)
+#undef E
+static void (*const screen_inits[FX_MAX])(void *) = { si0, si1, si2, si3, si4, si5, si6, si7, si8, si9, si10, si11,
+                                                      si12, si13, si14, si15 };
+static void (*const screen_draws[FX_MAX])(void *, int) = { sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7, sd8, sd9, sd10,
+                                                           sd11, sd12, sd13, sd14, sd15 };
+
 int copa_fx_add(const copa_def *d, int index)
 {
     if (nrecs == FX_MAX)
@@ -309,13 +344,15 @@ int copa_fx_add(const copa_def *d, int index)
     if ((f->flags & COOP_FX_F_SCREEN) && f->screen) {
         h->svg = copa_svg_path(d, index);
         if (h->svg) {
-            h->screen_init = h_screen_init;
-            h->screen_draw = h_screen_draw;
+            h->screen_init = screen_inits[nrecs];
+            h->screen_draw = screen_draws[nrecs];
         }
     }
     const int mark = opus_effect_host(copa_self, h);
-    if (mark < 0)
+    if (mark < 0) {
+        r->def = 0;
         return mark;
+    }
     r->mark = mark;
     ++nrecs;
     return 0;
