@@ -11,11 +11,13 @@ struct opl_self *copa_self;
  * memory (L1 data, given for good). 0 refused: the engine keeps its SDRAM fallback, as under coop. ---- */
 #define L1_LEASE_MAX 4096u
 int copa_l1_open;
-static uint32_t l1_used;
+static uint32_t l1_used, l1_asked;         /* granted and asked bytes, for the settings rows */
+static int scratch_where;                  /* the scratch: 1 fast, 2 audio pool, 3 pool, 0 none */
 
 void *coop_l1_lease(uint32_t bytes)
 {
     bytes = (bytes + 31) & ~31u;
+    l1_asked += bytes;
     if (!copa_l1_open || !bytes || l1_used + bytes > L1_LEASE_MAX)
         return 0;
     uint32_t *p = opus_fast(copa_self, bytes);
@@ -34,12 +36,12 @@ static void *l1_scratch;
 
 int copa_l1_scratch_make(void)
 {
-    if (!l1_scratch)
-        l1_scratch = opus_fast(copa_self, L1_SCRATCH);
-    if (!l1_scratch)
-        l1_scratch = opus_alloc_audio(copa_self, L1_SCRATCH);
-    if (!l1_scratch)
-        l1_scratch = opus_alloc(copa_self, L1_SCRATCH);
+    if (!l1_scratch && (l1_scratch = opus_fast(copa_self, L1_SCRATCH)) != 0)
+        scratch_where = 1;
+    if (!l1_scratch && (l1_scratch = opus_alloc_audio(copa_self, L1_SCRATCH)) != 0)
+        scratch_where = 2;
+    if (!l1_scratch && (l1_scratch = opus_alloc(copa_self, L1_SCRATCH)) != 0)
+        scratch_where = 3;
     return l1_scratch ? 0 : -1;
 }
 
@@ -155,7 +157,14 @@ static int status_row(int i, const char **label, char *value)
                     worst_note / 1000, worst_first / 1000, worst_later / 1000, valves);
         return 1;
     }
-    if (i < 0 || i > n + 1)
+    if (i == n + 2) {              /* the engines' L1: the lease granted of asked, and where the scratch is */
+        static const char *const where[4] = { "none", "fast", "audio", "pool" };
+        *label = "l1";
+        fw_snprintf(value, 40, "lease %u of %u scratch %s", (unsigned)l1_used, (unsigned)l1_asked,
+                    where[scratch_where]);
+        return 1;
+    }
+    if (i < 0 || i > n + 2)
         return 0;
     *label = copa_defs[i].name;
     volatile unsigned *c = scr_count[i];
