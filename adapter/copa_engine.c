@@ -48,24 +48,75 @@ static const eng_rec *me_or(int mark)
 static inline int index_of(void *voice) { return *(volatile int32_t *)voice; }
 static inline void *state_of(const coop_engine_t *e, void *voice) { return e->voice_bytes ? (uint8_t *)voice + HEAD : 0; }
 
-static void e_init(void *voice, int index) { *(volatile int32_t *)voice = index < 0 ? 0 : index % COOP_VOICES; }
+/* ---- note on and release in the audio block, as coop's core called them ----
+ * Opus calls note_on and release in the key thread (docs/api.md, Engines), which the audio interrupt can cut into; a
+ * coop engine's note_on is written for the audio thread: rings' swaps and copies voice states the render is playing
+ * and uses the L1 scratch the render uses. On an Opus 2 OP-1 (2026-11-13) a note struck while rings' voices still rang
+ * stopped the plugin. So the calls are queued here (the knobs copied) and made at the next render, in the order they
+ * came, before that render: the audio interrupt then never cuts into one. The key thread clears a voice's flag, writes
+ * its request, then sets the flag; the interrupt only acts on a set flag, so it never reads half a request. */
+#define P_ON  1u
+#define P_OFF 2u
+static volatile uint8_t pend[COOP_VOICES];
+static volatile uint32_t pend_seq[COOP_VOICES];
+static uint32_t seq;
+static const coop_engine_t *volatile pend_eng[COOP_VOICES];
+static void *volatile pend_voice[COOP_VOICES];
+static short pend_knobs[COOP_VOICES][8];
 
-static void e_note_on(void *voice, const short *knobs)
+static void e_init(void *voice, int index)
 {
-    const coop_engine_t *e = eng_of(me_or(knobs[4]));
-    if (e)
-        e->note_on(index_of(voice), state_of(e, voice), 32767, knobs);
+    const int i = index < 0 ? 0 : index % COOP_VOICES;
+    *(volatile int32_t *)voice = i;
+    pend[i] = 0;                   /* the voice was built again: silent, nothing owed */
 }
 
-static void e_release(void *voice, const short *knobs)
+static void queue(void *voice, const short *knobs, unsigned what)
 {
     const coop_engine_t *e = eng_of(me_or(knobs[4]));
-    if (e && e->note_off)
-        e->note_off(index_of(voice), state_of(e, voice));
+    if (!e)
+        return;
+    const int i = index_of(voice);
+    const unsigned had = pend[i];
+    pend[i] = 0;
+    pend_eng[i] = e;
+    pend_voice[i] = voice;
+    if (what == P_ON)
+        for (int k = 0; k < 8; ++k)
+            pend_knobs[i][k] = knobs[k];
+    pend_seq[i] = ++seq;
+    /* a release after a note not yet made: both, in order; a note after anything: the note alone */
+    pend[i] = (uint8_t)(what == P_OFF ? (had & P_ON) | P_OFF : P_ON);
+}
+
+static void e_note_on(void *voice, const short *knobs) { queue(voice, knobs, P_ON); }
+
+static void e_release(void *voice, const short *knobs) { queue(voice, knobs, P_OFF); }
+
+/* The audio block: the queued calls, oldest first. */
+static void flush(void)
+{
+    for (;;) {
+        int i = -1;
+        for (int k = 0; k < COOP_VOICES; ++k)
+            if (pend[k] && (i < 0 || (int32_t)(pend_seq[k] - pend_seq[i]) < 0))
+                i = k;
+        if (i < 0)
+            return;
+        const unsigned what = pend[i];
+        pend[i] = 0;
+        const coop_engine_t *e = pend_eng[i];
+        void *voice = pend_voice[i];
+        if (what & P_ON)
+            e->note_on(i, state_of(e, voice), 32767, pend_knobs[i]);
+        if ((what & P_OFF) && e->note_off)
+            e->note_off(i, state_of(e, voice));
+    }
 }
 
 static void e_render(void *voice, short *out, const short *par, const unsigned *pitch)
 {
+    flush();
     const coop_engine_t *e = eng_of(me_or(par[4]));
     if (!e) {                      /* not ours to know: silence, never a fault */
         for (int i = 0; i < COOP_VOICE_BLOCK; ++i)
