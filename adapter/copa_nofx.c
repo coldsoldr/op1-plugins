@@ -14,13 +14,3 @@ int copa_fx_buffers(uint32_t bytes)
     (void)bytes;
     return -1;
 }
-
-void copa_fx_frame(void) {}
-
-int copa_fx_row(int i, const char **label, char *value)
-{
-    (void)i;
-    (void)label;
-    (void)value;
-    return 0;
-}

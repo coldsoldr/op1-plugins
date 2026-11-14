@@ -19,12 +19,12 @@ files from their **coop** sources.
 | saw | synth engine | two detuned oscillators and a sub |
 | rings | synth engine | Mutable Instruments Rings, fixed point |
 
-Each plugin's README (`plugins/<name>/README.md`) says what its encoders do. The `cs fx` pack holds all eleven effects in
+Each plugin's README (`plugins/<name>/README.md`) says what its encoders do. The `cs fx` pack holds the nine older effects in
 one file.
 
 **Status (2.1.0, 2026-11-14): played on an OP-1 with Opus 2 (build 7 dev 146).** Saw and rings play, with their FN
 controls and screens; rings plays every model and polyphony, model changes included, without a stall or a click heard.
-**2.2.0 adds petri and fickle** (host-tested and simulator-measured in co-op, not yet run on the OP-1). The effects load with their own screens and FN controls (bitcrusher checked in full). Not yet measured: the CPU
+**2.2.5 adds petri and fickle**, played on the OP-1 as single files (an Opus file serves at most nine effects from the list, so the pack keeps its nine), and makes the effects' clicks work (hold, freeze, heads, mode). The effects load with their own screens and FN controls (bitcrusher checked in full). Not yet measured: the CPU
 figures (`cpu.txt`). See [docs/porting.md](docs/porting.md) for what to try and what the device runs taught.
 
 ## What is here
@@ -55,7 +55,7 @@ To take newer plugin sources from co-op: `python tools/sync_coop.py ../co-op`, t
 ## Installing
 
 Opus 2 on the OP-1, then in disk mode (shift + COM, then T3) copy the `.opmod` files into the disk's `mods` folder,
-eject and restart. Use either the single effect files or `cs_fx.opmod`, not both: the second copy of an effect name is
+eject and restart. `petri.opmod` and `fickle.opmod` go beside either set. For the nine older effects use either the single files or `cs_fx.opmod`, not both: the second copy of an effect name is
 refused. Switching between the two changes the effects' marks, so an effect chosen under one stays the plain filter
 under the other until it is chosen again (saved sounds keep the name and load right). These replace the earlier
 `coldsoldr.*` 1.0.0 Opus files built from the kennel versions (same ids, version 2.0.0 and up).
