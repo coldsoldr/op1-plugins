@@ -110,6 +110,11 @@ Each found on the device, then fixed; the version that fixed it in brackets.
 - Rings itself (co-op, synced): a model or polyphony change cuts the voices struck with the old one (0.6); a chord's
   steals go silent without a fade or a copy, one shorter fade at a time (0.7); a string's delay line is cleared as the
   string reaches it, not 64 KB at a strike (0.8, bit-identical in the host test).
+- **No effect click acted** (2.2.1; reported on petri and fickle, true of every effect with a click: tape echo's hold and
+  heads, the reverbs' freeze, freq shift's mode). Opus runs every key filter before a hosted effect's `key`, and the
+  engines' filter (`copa_input.c`, started in every file) handled every encoder release: on an effect page it consumed
+  the press the hosted key had recorded and took the release. The filter now acts on a release only when it took the
+  press; `tests/input_test.c` runs the filter beside the hosted path (it fails on 2.2.0's adapter).
 - **Effects chosen under the single files are another mark under `cs_fx.opmod`** (and back): such a sound shows the
   filter until the effect is chosen again.
 

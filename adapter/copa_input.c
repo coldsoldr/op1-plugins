@@ -91,11 +91,15 @@ static int on_key(int key, int pressed)
         s_press_pos[enc] = t.pos;
         return copa_click(enc, 1, &action);
     }
+    if (!s_press_def[enc])
+        return 0;                  /* a press this filter did not take (a hosted effect's, the OS's): its release too */
+    const copa_def *const pressed_def = s_press_def[enc];
+    s_press_def[enc] = 0;
     const int taken = copa_click(enc, 0, &action);
     if (!taken || !action)
         return taken;
     target t;
-    if (!find_target(&t) || t.d != s_press_def[enc] || t.pos != s_press_pos[enc])
+    if (!find_target(&t) || t.d != pressed_def || t.pos != s_press_pos[enc])
         return 1;                  /* the page changed under the click: nothing */
     const copa_ctl *c = copa_find(t.d, action, enc);
     if (!c)
