@@ -121,6 +121,86 @@ const char *copa_svg_path(const copa_def *d, int index)
     return opus_rename(tmp, path) == OPUS_RENAME_OK ? path : 0;
 }
 
+/* ---- DIAGNOSTIC (2.2.2, temporary): Opus's own figures for this plugin (opus_stats, api.md's layout): whether the
+ * core switched its audio off and at what cost, its worst block, the blocks over its figure, the audio's late
+ * blocks. Asked every 64 frames from the display thread. ---- */
+struct st_head { unsigned magic; unsigned short version, head_size; unsigned size, seq, cyc_lo, cyc_hi, up_ms, block; };
+struct st_sec { unsigned short tag, entry_size, count, pad; };
+struct st_plugin { unsigned ram, base, image; short part; unsigned char state, bank; };
+struct st_part {
+    unsigned a_lo, a_hi;
+    unsigned w[8];
+    unsigned budget, worst, over, off_at;
+    unsigned char most, off, unlimited, pad;
+    short plugin;
+    unsigned short name;
+};
+struct st_audio { unsigned b_lo, b_hi, blocks, late; };
+static unsigned st_buf[4096];
+static volatile int st_off = -1, st_part = -1;
+static volatile unsigned st_off_at, st_worst, st_over, st_late, st_frames;
+
+static void read_stats(void)
+{
+    if ((st_frames++ & 63) != 0)
+        return;
+    const int n = opus_stats(st_buf, sizeof st_buf);
+    if (n <= 0)
+        return;
+    const unsigned char *rec = (const unsigned char *)st_buf;
+    const struct st_head *h = (const struct st_head *)rec;
+    if (h->magic != 0x5453504Fu)
+        return;
+    const unsigned me = (unsigned)(unsigned long)&opl_init;
+    for (int pass = 0; pass < 2; ++pass) {         /* the plugins section names our part, then the parts section */
+        unsigned at = (h->head_size + 7u) & ~7u;
+        while (at + sizeof(struct st_sec) <= (unsigned)n) {
+            const struct st_sec *sec = (const struct st_sec *)(rec + at);
+            const unsigned body = at + sizeof *sec;
+            for (unsigned i = 0; i < sec->count && body + (i + 1) * sec->entry_size <= (unsigned)n; ++i) {
+                const unsigned char *e = rec + body + i * sec->entry_size;
+                if (pass == 0 && sec->tag == 4 && sec->entry_size >= sizeof(struct st_plugin)) {
+                    const struct st_plugin *pl = (const struct st_plugin *)e;
+                    if (me >= pl->base && me < pl->base + pl->image)
+                        st_part = pl->part;
+                } else if (pass == 0 && sec->tag == 1 && sec->entry_size >= sizeof(struct st_audio)) {
+                    st_late = ((const struct st_audio *)e)->late;
+                } else if (pass == 1 && sec->tag == 3 && sec->entry_size >= sizeof(struct st_part) &&
+                           (int)i == st_part) {
+                    const struct st_part *pt = (const struct st_part *)e;
+                    st_off = pt->off;
+                    st_off_at = pt->off_at;
+                    st_worst = pt->worst;
+                    st_over = pt->over;
+                }
+            }
+            at = (body + sec->count * sec->entry_size + 7u) & ~7u;
+        }
+    }
+}
+
+static int rows(int i, const char **label, char *value)
+{
+    if (copa_fx_row(i, label, value))
+        return 1;
+    int n = 0;
+    while (copa_fx_row(n, label, value))
+        ++n;
+    if (i != n)
+        return 0;
+    *label = "core";
+    fw_snprintf(value, 40, "off %d at %uk worst %uk over %u late %u", st_off, st_off_at / 1000, st_worst / 1000,
+                st_over, st_late);
+    return 1;
+}
+
+static void frame(unsigned short *buf)
+{
+    read_stats();
+    copa_fx_frame();
+    copa_frame(buf);
+}
+
 int opl_init(struct opl_self *self)
 {
     copa_self = self;
@@ -149,7 +229,8 @@ int opl_init(struct opl_self *self)
     }
     if (!added)
         return -1;
-    opus_on_frame(self, copa_frame);
+    opus_on_frame(self, frame);
+    opus_on_settings_rows(self, rows);             /* DIAGNOSTIC 2.2.2 */
     copa_input_start();
     return 0;
 }

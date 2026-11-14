@@ -87,6 +87,8 @@ void copa_input_start(void);                                   /* from opl_init:
 int copa_fx_add(const copa_def *d, int index);
 int copa_engine_add(const copa_def *d, int index);
 int copa_fx_buffers(uint32_t bytes);                           /* the three position buffers: 0, or -1 no room */
+void copa_fx_frame(void);                                      /* DIAGNOSTIC 2.2.2: the effect page shown */
+int copa_fx_row(int i, const char **label, char *value);       /* DIAGNOSTIC 2.2.2: the settings rows */
 
 /* ---- copa_host.c ---- */
 const char *copa_svg_path(const copa_def *d, int index);       /* the SVG on the flash, written when needed */

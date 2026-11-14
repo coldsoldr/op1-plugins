@@ -53,6 +53,13 @@ static int32_t L[BLOCK], R[BLOCK];
 
 static inline const fx_rec *me(void) { return (const fx_rec *)opus_called(); }
 
+/* ---- DIAGNOSTIC (2.2.2, temporary): why petri and fickle come back as the plain filter after another effect was
+ * chosen at their position. Shown as rows on the plugin's settings page (copa_fx_row, below). ---- */
+static volatile unsigned d_init[FX_MAX], d_render[FX_MAX], d_refused[FX_MAX];
+static volatile unsigned d_hinit[3], d_nomatch[3];
+static volatile int d_par4[3];
+static volatile int d_where = -1, d_mark, d_match = -2;
+
 /* The record the core is calling: opus_called(), else the one whose mark is in word 4 (the OS carries every hosted
  * effect as the filter with its mark there), else 0. */
 static const fx_rec *me_or(int mark)
@@ -135,7 +142,9 @@ static int started(const fx_rec *r, int pos)
         return 1;
     latch[pos] = 0;
     cur[pos] = 0;
+    ++d_init[r - recs];
     if (fx_of(r)->init(pos) != 0) {
+        ++d_refused[r - recs];
         ((fx_rec *)r)->failed = 1;
         return 0;
     }
@@ -145,13 +154,22 @@ static int started(const fx_rec *r, int pos)
 
 static void h_init(int pos)
 {
-    if (pos >= 0 && pos < 3)
+    if (pos >= 0 && pos < 3) {
         cur[pos] = 0;              /* the OS made its effect again here: coop's init at the next block */
+        ++d_hinit[pos];
+    }
 }
 
 static void h_render(int pos, short *buf, const short *par)
 {
     const fx_rec *r = me_or(par[4]);
+    if (pos >= 0 && pos < 3) {
+        d_par4[pos] = par[4];
+        if (!r)
+            ++d_nomatch[pos];
+    }
+    if (r)
+        ++d_render[r - recs];
     if (!r || pos < 0 || pos > 1 || !started(r, pos))
         return;
     int16_t p[COOP_FX_PARAMS_MIN];
@@ -166,6 +184,13 @@ static void h_render(int pos, short *buf, const short *par)
 static void h_render_stereo(int pos, short *l, short *rr, const short *par)
 {
     const fx_rec *r = me_or(par[4]);
+    if (pos == 2) {
+        d_par4[2] = par[4];
+        if (!r)
+            ++d_nomatch[2];
+    }
+    if (r)
+        ++d_render[r - recs];
     if (!r || pos != 2 || !started(r, pos))
         return;
     int16_t p[COOP_FX_PARAMS_MIN];
@@ -355,5 +380,53 @@ int copa_fx_add(const copa_def *d, int index)
     }
     r->mark = mark;
     ++nrecs;
+    return 0;
+}
+
+/* ---- DIAGNOSTIC (2.2.2, temporary): the effect page shown (display thread) and the settings rows ---- */
+void copa_fx_frame(void)
+{
+    struct opus_page pg;
+    if (!opus_page_now(&pg) || pg.kind != OPUS_PAGE_EFFECT)
+        return;
+    d_where = pg.where;
+    d_mark = pg.live[4];
+    int m = -1;
+    for (int i = 0; i < nrecs; ++i)
+        if (pg.module == (const void *)&recs[i].h || recs[i].mark == pg.live[4])
+            m = i;
+    d_match = m;
+}
+
+static int rec_of(const fx_rec *r) { return r ? (int)(r - recs) : -1; }
+
+int copa_fx_row(int i, const char **label, char *value)
+{
+    if (i < 0)
+        return 0;
+    if (i < nrecs) {               /* each effect: its mark, coop inits, renders, inits refused, failed */
+        *label = recs[i].def->name;
+        fw_snprintf(value, 40, "m%04x i%u r%u x%u f%d", recs[i].mark & 0xFFFF, d_init[i], d_render[i], d_refused[i],
+                    recs[i].failed);
+        return 1;
+    }
+    i -= nrecs;
+    if (i == 0) {                  /* the last effect page shown: its position, word 4, which of ours it is */
+        *label = "page";
+        fw_snprintf(value, 40, "w%d m%04x is %d", d_where, d_mark & 0xFFFF, d_match);
+        return 1;
+    }
+    if (i == 1) {                  /* per position: the effect started there and the last word 4 a render saw */
+        *label = "running";
+        fw_snprintf(value, 40, "%d %04x  %d %04x  %d %04x", rec_of(cur[0]), d_par4[0] & 0xFFFF, rec_of(cur[1]),
+                    d_par4[1] & 0xFFFF, rec_of(cur[2]), d_par4[2] & 0xFFFF);
+        return 1;
+    }
+    if (i == 2) {                  /* per position: the OS remade the effect; renders whose word 4 is none of ours */
+        *label = "remade";
+        fw_snprintf(value, 40, "h%u/%u/%u n%u/%u/%u", d_hinit[0], d_hinit[1], d_hinit[2], d_nomatch[0], d_nomatch[1],
+                    d_nomatch[2]);
+        return 1;
+    }
     return 0;
 }
