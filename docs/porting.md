@@ -1,6 +1,6 @@
 # coop plugins on Opus 2
 
-The eleven coldsoldr coop plugins (nine effects, two synth engines) as Opus 2 `.opmod` files. Their sources are the
+The thirteen coldsoldr coop plugins (eleven effects, two synth engines) as Opus 2 `.opmod` files. Their sources are the
 coop sources byte for byte (`plugins/`, from co-op `firmware/plugins`); one adapter (`adapter/`, "copa") gives them the
 coop plugin interface on top of Opus's core, so a fix in co-op reaches these with `tools/sync_coop.py` and a build.
 
@@ -25,7 +25,7 @@ The build keeps `build/<name>.build/plugin_0.elf` for the crash logs:
 | `params[0..3]` in the filter type's ranges | the hosted page's words, kept inside R246's filter range row (`0x01DE5C50 + 5 x 0x30`) as coop's `fx_sanitize` |
 | `params[5..7]` the controls' words, `params[8]` the latches (e6) | the same: words clamped per control, latches per position, cleared when the effect starts at a position |
 | `init(slot)` at the first block after a change | the same check in the render (coop's `g_cur`); the hosted `init` forces it |
-| position buffers, `coop_fx_scratch` (e8) | three buffers per file (synth, drum, master) from `opus_alloc_audio`, as big as the file's largest `scratch`. The pack shares one set among its nine effects, as coop's core does |
+| position buffers, `coop_fx_scratch` (e8) | three buffers per file (synth, drum, master) from `opus_alloc_audio`, as big as the file's largest `scratch`. The pack shares one set among its eleven effects, as coop's core does |
 | effect screens with `coop_fx_view_t` (e9) | the hosted screen; the view filled from `opus_page_now` (the position, the live words with the LFO), the latches, the position buffer while the effect runs there |
 | engines on iter's voice loop | `opus_engine_add`: 128 samples at 88.2 kHz, the same phase step, the OS's envelope, velocity and mix in both. `COOP_ENGINE_F_44K` doubled to 128 samples as coop does. The note's velocity is applied by the OS, so the engine gets full scale. `type` is the coop name, so a coop sound of the engine loads |
 | the declared controls, the popup (e4, e6) | `copa_ctl.c`: coop's layers (fn = Opus's FN key), steps, detents, wrap, step, fine step and remainder, clicks on release with the layer kept, an undeclared layer taken; the popup top left in the encoder's colour, drawn from `opus_on_frame` |
@@ -57,7 +57,7 @@ The cost: these effects never appear in a manager's second slot.
 |---|---|---|
 | `bitcrusher.opmod` ... `cs_hall.opmod` | `coldsoldr.<name>` | one effect each |
 | `saw.opmod`, `rings.opmod` | `coldsoldr.saw`, `coldsoldr.rings` | one engine each |
-| `cs_fx.opmod` | `coldsoldr.cs_fx` | the nine effects: one row in the mods list, one set of position buffers (3 x 132 KB instead of 3 x 313 KB for the nine singles) |
+| `cs_fx.opmod` | `coldsoldr.cs_fx` | the eleven effects: one row in the mods list, one set of position buffers (3 x 168 KB, fickle's 171,936 bytes being the largest; petri 150,624). petri and fickle (2.2.0) are new coop effects, not yet run on the OP-1 |
 
 All need core 2.31 (`opus_page_now`). `cpu` is `unmeasured` until measured (below). Rings' voice states (556 KB) come
 from the audio pool at its init (`copa_alloc_audio`), not its zero fill.

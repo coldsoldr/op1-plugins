@@ -14,15 +14,17 @@ files from their **coop** sources.
 | tape echo | effect | three-head tape echo, tempo sync |
 | cs plate | effect | plate reverb with freeze |
 | cs hall | effect | eight-line FDN hall reverb with freeze |
+| petri | effect | micro-loop / granular engine: eleven effects on a recorded buffer, filter, space, hold, reverse |
+| fickle | effect | a wet channel (reverb, delay, slip) and an always-listening micro-looper on one clock |
 | saw | synth engine | two detuned oscillators and a sub |
 | rings | synth engine | Mutable Instruments Rings, fixed point |
 
-Each plugin's README (`plugins/<name>/README.md`) says what its encoders do. The `cs fx` pack holds all nine effects in
+Each plugin's README (`plugins/<name>/README.md`) says what its encoders do. The `cs fx` pack holds all eleven effects in
 one file.
 
 **Status (2.1.0, 2026-11-14): played on an OP-1 with Opus 2 (build 7 dev 146).** Saw and rings play, with their FN
 controls and screens; rings plays every model and polyphony, model changes included, without a stall or a click heard.
-The effects load with their own screens and FN controls (bitcrusher checked in full). Not yet measured: the CPU
+**2.2.0 adds petri and fickle** (host-tested and simulator-measured in co-op, not yet run on the OP-1). The effects load with their own screens and FN controls (bitcrusher checked in full). Not yet measured: the CPU
 figures (`cpu.txt`). See [docs/porting.md](docs/porting.md) for what to try and what the device runs taught.
 
 ## What is here
