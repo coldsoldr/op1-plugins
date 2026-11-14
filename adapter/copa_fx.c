@@ -59,6 +59,9 @@ static volatile unsigned d_init[FX_MAX], d_render[FX_MAX], d_refused[FX_MAX];
 static volatile unsigned d_hinit[3], d_nomatch[3];
 static volatile int d_par4[3];
 static volatile int d_where = -1, d_mark, d_match = -2;
+#define HIST 6
+static volatile int d_hist[HIST], d_nhist, d_type;   /* 2.2.4: the page's word 4 as it changed, oldest first */
+static volatile short d_live[8], d_par[8];
 
 /* The record the core is calling: opus_called(), else the one whose mark is in word 4 (the OS carries every hosted
  * effect as the filter with its mark there), else 0. */
@@ -391,6 +394,15 @@ void copa_fx_frame(void)
         return;
     d_where = pg.where;
     d_mark = pg.live[4];
+    for (int k = 0; k < 8; ++k) {   /* 2.2.4: the page's words: live, and par (what the sound stores) */
+        d_live[k] = pg.live[k];
+        d_par[k] = pg.par ? pg.par[k] : -1;
+    }
+    d_type = pg.module ? (int)(((unsigned long)pg.module) & 0xFFFF) : 0;
+    if (pg.live[4] != d_hist[d_nhist ? (d_nhist - 1) % HIST : 0] || !d_nhist) {   /* a new word 4: kept in order */
+        d_hist[d_nhist % HIST] = pg.live[4];
+        ++d_nhist;
+    }
     int m = -1;
     for (int i = 0; i < nrecs; ++i)
         if (pg.module == (const void *)&recs[i].h || recs[i].mark == pg.live[4])
@@ -426,6 +438,24 @@ int copa_fx_row(int i, const char **label, char *value)
         *label = "remade";
         fw_snprintf(value, 40, "h%u/%u/%u n%u/%u/%u", d_hinit[0], d_hinit[1], d_hinit[2], d_nomatch[0], d_nomatch[1],
                     d_nomatch[2]);
+        return 1;
+    }
+    if (i == 3) {                  /* 2.2.4: the page's word 4 as it changed, oldest first (the last 6) */
+        *label = "marks";
+        char *o = value;
+        const int n = d_nhist, first = n > HIST ? n - HIST : 0;
+        for (int k = first; k < n; ++k)
+            o += fw_snprintf(o, 6, "%04x ", d_hist[k % HIST] & 0xFFFF);
+        *o = 0;
+        if (!n)
+            fw_snprintf(value, 40, "none");
+        return 1;
+    }
+    if (i == 4 || i == 5) {        /* 2.2.4: the page's words 0-7, as heard (live) and as stored (par) */
+        volatile short *w = i == 4 ? d_live : d_par;
+        *label = i == 4 ? "live" : "stored";
+        fw_snprintf(value, 40, "%04x %04x %04x %04x %04x %04x %04x %04x", w[0] & 0xFFFF, w[1] & 0xFFFF, w[2] & 0xFFFF,
+                    w[3] & 0xFFFF, w[4] & 0xFFFF, w[5] & 0xFFFF, w[6] & 0xFFFF, w[7] & 0xFFFF);
         return 1;
     }
     return 0;
