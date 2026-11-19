@@ -37,6 +37,7 @@ figures (`cpu.txt`). See [docs/porting.md](docs/porting.md) for what to try and 
 | `adapter/` | copa: the coop plugin interface implemented on Opus 2's core. |
 | `tools/` | `build.py` (builds the `.opmod` files), `plugins.py` (what is built), `sync_coop.py` (copies the sources from a co-op checkout). |
 | `tests/` | Host tests of the adapter. |
+| `kennel/` | cokn: fickle and petri as hundekraft kennel `.knl` files from the same coop sources (`python3 tools/build_knl.py`, needs te-op1-cfw beside this repo); `kennel/README.md`. |
 
 ## Building
 

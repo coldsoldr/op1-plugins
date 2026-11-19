@@ -1,0 +1,20 @@
+{
+  "name": "petri",
+  "kind": "fx",
+  "order": 0,
+  "loadable": true,
+  "stereo": true,
+  "symbol": "KNL_petri",
+  "sources": ["petri_knl.cc", "../cokn.cc", "../../plugins/petri/petri.cc", "../../plugins/petri/petri_screen.cc",
+              "../../plugins/petri/src/petri_engine.cc", "../../plugins/petri/src/halfband.cc",
+              "../../plugins/petri/src/halfband_bfin.S", "../../plugins/petri/src/voice_bfin.S",
+              "../../plugins/petri/src/space_bfin.S"],
+  "include_dirs": ["..", "../../plugins/petri", "../../coop-sdk"],
+  "cxxflags": ["-DCOOP_FX_SCRATCH_BYTES=150624"],
+  "defaults": [16384, 13107, 13107, 16384],
+  "page2_defaults": [0, 30000, 8000],
+  "screen": {"svg": "../../plugins/petri/petri.svg", "symbol": "KSCREEN_petri"},
+  "author": "coldsoldr",
+  "version": "0.1",
+  "claims": []
+}

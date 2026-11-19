@@ -1,0 +1,17 @@
+{
+  "name": "fickle",
+  "kind": "fx",
+  "order": 0,
+  "loadable": true,
+  "stereo": true,
+  "symbol": "KNL_fickle",
+  "sources": ["fickle_knl.cc", "../cokn.cc", "../../plugins/fickle/fickle.cc", "../../plugins/fickle/fickle_screen.cc"],
+  "include_dirs": ["..", "../../plugins/fickle", "../../coop-sdk"],
+  "cxxflags": ["-DCOOP_FX_SCRATCH_BYTES=171936"],
+  "defaults": [14000, 12000, 29372, 16384],
+  "page2_defaults": [1536, 0, 0],
+  "screen": {"svg": "../../plugins/fickle/fickle.svg", "symbol": "KSCREEN_fickle"},
+  "author": "coldsoldr",
+  "version": "0.1",
+  "claims": []
+}
